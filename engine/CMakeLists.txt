@@ -1,7 +1,7 @@
 # engine/ — temporary single executable until T0.3 extracts libnetdiff.
 #
-# Windows-only web_dashboard.cpp is intentionally excluded from this target so
-# Linux/macOS/Windows CI can share one source list (full removal is T0.2).
+# Core sources only. Windows-only web dashboard and VS project files live under
+# legacy/windows/ (reference), not in this target.
 
 set(NETDIFF_ENGINE_SOURCES
   geometry.cpp
@@ -25,7 +25,6 @@ add_executable(netdiff_engine ${NETDIFF_ENGINE_SOURCES})
 
 target_include_directories(netdiff_engine PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
-# Keep MSVC/MinGW happy with UTF-8 sources that contain non-ASCII comments/strings.
 if(MSVC)
   target_compile_options(netdiff_engine PRIVATE /utf-8)
 endif()

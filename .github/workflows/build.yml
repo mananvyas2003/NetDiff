@@ -27,6 +27,10 @@ jobs:
       - name: Build
         run: cmake --build build --config Release --parallel
 
+      - name: Core path portability check (T0.2)
+        shell: bash
+        run: bash tests/portability/check_core_path.sh
+
       - name: Verify binary exists (Unix)
         if: runner.os != 'Windows'
         run: test -x build/engine/netdiff_engine
