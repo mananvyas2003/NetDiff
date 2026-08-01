@@ -10,4 +10,5 @@
 *.exe
 *.pdb
 *.ilk
+graph_esp32.json
 .DS_Store

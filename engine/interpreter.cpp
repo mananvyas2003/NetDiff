@@ -432,6 +432,11 @@ void Interpreter::ExtractProperty(
         component.value =
             property_value;
     }
+    else if (property_name == "Footprint")
+    {
+        component.footprint =
+            property_value;
+    }
 }
 
 
@@ -499,6 +504,8 @@ void Interpreter::ExtractComponent(uint32_t idx)
 
 
     Component component;
+
+    component.lib_id = lib_symbol_name;
 
     // ----------------------------------------------------
     // Location / Rotation

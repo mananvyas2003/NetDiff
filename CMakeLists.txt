@@ -6,7 +6,6 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-# Warnings-as-errors on all platforms (T0.1 AC).
 if(MSVC)
   add_compile_options(/W4 /WX /permissive-)
 else()
@@ -14,3 +13,5 @@ else()
 endif()
 
 add_subdirectory(engine)
+
+enable_testing()

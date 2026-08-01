@@ -53,6 +53,8 @@ struct Component
 {
     std::string reference;
     std::string value;
+    std::string footprint;
+    std::string lib_id;
 
     Point location;
 

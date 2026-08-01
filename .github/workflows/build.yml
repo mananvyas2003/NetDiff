@@ -31,6 +31,15 @@ jobs:
         shell: bash
         run: bash tests/portability/check_core_path.sh
 
+      - name: Graph determinism (T0.3)
+        shell: bash
+        run: |
+          if [ -f build/engine/test_graph_determinism ]; then
+            ctest --test-dir build -R graph_determinism_esp32 --output-on-failure
+          else
+            ctest --test-dir build -C Release -R graph_determinism_esp32 --output-on-failure
+          fi
+
       - name: Verify binary exists (Unix)
         if: runner.os != 'Windows'
         run: test -x build/engine/netdiff_engine
