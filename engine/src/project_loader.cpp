@@ -35,8 +35,8 @@ Schematic ParseSchematicFile(const std::string& path) {
     Lexer lexer(buffer.data());
     Parser parser(lexer);
     const uint32_t root = parser.Parse();
-    if (root == 0) {
-        throw std::runtime_error("Parser returned empty AST for: " + path);
+    if (root == 0 || parser.HadError()) {
+        throw std::runtime_error("Failed to parse schematic (empty or malformed): " + path);
     }
     Interpreter interpreter(parser.GetPool());
     return interpreter.Execute(root);

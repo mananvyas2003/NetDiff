@@ -57,6 +57,7 @@ netdiff_add_test(test_multisheet_load test_multisheet_load.cpp)
 netdiff_add_test(test_cross_sheet_net test_cross_sheet_net.cpp)
 netdiff_add_test(test_bus_noconnect_parse test_bus_noconnect_parse.cpp)
 netdiff_add_test(test_bus_member_expansion test_bus_member_expansion.cpp)
+netdiff_add_test(test_robustness test_robustness.cpp)
 
 enable_testing()
 
@@ -97,3 +98,5 @@ add_test(
 # Intentional failing placeholder until bus member expansion is specified.
 add_test(NAME bus_member_expansion_todo COMMAND test_bus_member_expansion)
 set_tests_properties(bus_member_expansion_todo PROPERTIES WILL_FAIL TRUE)
+
+add_test(NAME robustness_malformed COMMAND test_robustness)

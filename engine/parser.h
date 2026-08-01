@@ -27,6 +27,8 @@ private:
     // The unified flat memory block containing our entire tree hierarchy
     std::vector<ASTNode> node_pool;
 
+    bool had_error_ = false;
+
     // Secure helper to allocate a node inside our cache-friendly pool
     uint32_t AllocateNode(NodeType type, TokenView text, double num_val = 0.0);
 
@@ -42,6 +44,8 @@ public:
 
     // Triggers execution and returns the root node index
     uint32_t Parse();
+
+    bool HadError() const { return had_error_; }
 
     // Debugging utility to inspect the pool if needed
     const std::vector<ASTNode>& GetPool() const { return node_pool; }

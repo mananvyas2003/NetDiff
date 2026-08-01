@@ -1,4 +1,5 @@
 /build/
+/build-*/
 /out/
 /cmake-build-*/
 /.vs/
@@ -13,3 +14,4 @@
 graph_esp32.json
 tests/corpus/_staging/
 .DS_Store
+t06_*.kicad_sch

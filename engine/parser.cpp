@@ -57,6 +57,7 @@ uint32_t Parser::Parse()
     {
         if (current_token.type == TokenType::Error)
         {
+            had_error_ = true;
             std::cerr << "Parser Fatal: Lexer error encountered at Line "
                 << current_token.line << ", Column " << current_token.column << "\n";
             break;
@@ -116,6 +117,7 @@ uint32_t Parser::ParseExpression()
     {
         // We should never hit a ')' outside of a ParseList() loop.
         // If we do, the parentheses in the file are unbalanced.
+        had_error_ = true;
         std::cerr << "Parser Warning: Unexpected closing parenthesis at Line "
             << current_token.line << "\n";
         Consume();
@@ -171,6 +173,7 @@ uint32_t Parser::ParseList()
     }
     else
     {
+        had_error_ = true;
         std::cerr << "Parser Error: Reached EOF before closing list started at Line "
             << current_token.line << "\n";
     }
