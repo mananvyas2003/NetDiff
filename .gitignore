@@ -1,0 +1,13 @@
+/build/
+/out/
+/cmake-build-*/
+/.vs/
+/CMakeUserPresets.json
+*.user
+*.suo
+*.obj
+*.o
+*.exe
+*.pdb
+*.ilk
+.DS_Store
