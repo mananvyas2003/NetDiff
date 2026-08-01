@@ -1,5 +1,6 @@
 #include "interpreter.h"
 
+#include <cctype>
 #include <cstring>
 #include <iostream>
 
@@ -34,7 +35,8 @@ Schematic Interpreter::Execute(uint32_t root)
 
 void Interpreter::ExtractLibraryPinsRecursive(
     uint32_t idx,
-    LibrarySymbol& symbol)
+    LibrarySymbol& symbol,
+    int current_unit)
 {
     if (idx == 0)
         return;
@@ -43,9 +45,35 @@ void Interpreter::ExtractLibraryPinsRecursive(
     {
         ExtractLibraryPin(
             idx,
-            symbol);
+            symbol,
+            current_unit);
 
         return;
+    }
+
+    // Nested unit/body sub-symbol: (symbol "R_1_1" ...)
+    if (NodeNameEquals(idx, "symbol"))
+    {
+        uint32_t child = pool[idx].first_child;
+        if (child != 0)
+        {
+            child = pool[child].next_sibling;
+        }
+        if (child != 0)
+        {
+            const std::string sub_name = GetText(child);
+            const int unit = UnitFromSubSymbolName(sub_name);
+            child = pool[child].next_sibling;
+            while (child != 0)
+            {
+                ExtractLibraryPinsRecursive(
+                    child,
+                    symbol,
+                    unit > 0 ? unit : current_unit);
+                child = pool[child].next_sibling;
+            }
+            return;
+        }
     }
 
     uint32_t child =
@@ -55,7 +83,8 @@ void Interpreter::ExtractLibraryPinsRecursive(
     {
         ExtractLibraryPinsRecursive(
             child,
-            symbol);
+            symbol,
+            current_unit);
 
         child =
             pool[child].next_sibling;
@@ -112,7 +141,8 @@ void Interpreter::ExtractLibrarySymbol(uint32_t idx)
 
     ExtractLibraryPinsRecursive(
         idx,
-        symbol);
+        symbol,
+        0);
 
     std::cout
         << "Pins Found : "
@@ -125,9 +155,11 @@ void Interpreter::ExtractLibrarySymbol(uint32_t idx)
 
 void Interpreter::ExtractLibraryPin(
     uint32_t idx,
-    LibrarySymbol& symbol)
+    LibrarySymbol& symbol,
+    int unit)
 {
     LibraryPin pin;
+    pin.unit = unit;
 
     uint32_t child =
         pool[idx].first_child;
@@ -155,6 +187,10 @@ void Interpreter::ExtractLibraryPin(
                 child,
                 pin.offset,
                 pin.rotation);
+
+            // KiCad stores library/symbol coords with Y opposite schematic:
+            // parseXY(/*aInvertY=*/true) negates Y on load.
+            pin.offset.y = -pin.offset.y;
         }
 
         child =
@@ -167,6 +203,8 @@ void Interpreter::ExtractLibraryPin(
         << pin.number
         << " "
         << pin.name
+        << " unit="
+        << pin.unit
         << " @ "
         << pin.offset.x
         << ", "
@@ -452,14 +490,17 @@ Point RotatePoint(
 {
     Point result;
 
+    // KiCad TRANSFORM + TransformCoordinate(x' = x1*x + y1*y, y' = x2*x + y2*y):
+    //   file 90  → TRANSFORM(0,1,-1,0) → (x,y) → (y,-x)
+    //   file 270 → TRANSFORM(0,-1,1,0) → (x,y) → (-y,x)
     if (rotation == 0)
     {
         result = p;
     }
     else if (rotation == 90)
     {
-        result.x = -p.y;
-        result.y = p.x;
+        result.x = p.y;
+        result.y = -p.x;
     }
     else if (rotation == 180)
     {
@@ -468,8 +509,8 @@ Point RotatePoint(
     }
     else if (rotation == 270)
     {
-        result.x = p.y;
-        result.y = -p.x;
+        result.x = -p.y;
+        result.y = p.x;
     }
     else
     {
@@ -477,6 +518,61 @@ Point RotatePoint(
     }
 
     return result;
+}
+
+Point Interpreter::TransformLibOffset(
+    Point offset,
+    double rotation,
+    bool mirror_x,
+    bool mirror_y)
+{
+    // Match KiCad sexpr load: SetTransform(angle), then SetOrientation(mirror).
+    Point r = RotatePoint(offset, rotation);
+    if (mirror_y)
+    {
+        r.x = -r.x;
+    }
+    if (mirror_x)
+    {
+        r.y = -r.y;
+    }
+    return r;
+}
+
+int Interpreter::UnitFromSubSymbolName(const std::string& name)
+{
+    std::string base = name;
+    const auto colon = base.rfind(':');
+    if (colon != std::string::npos)
+    {
+        base = base.substr(colon + 1);
+    }
+
+    // Expect "..._<unit>_<bodyStyle>" e.g. R_1_1, ECC83_2_1, CP_0_1
+    const auto u2 = base.rfind('_');
+    if (u2 == std::string::npos || u2 == 0)
+    {
+        return 0;
+    }
+    const auto u1 = base.rfind('_', u2 - 1);
+    if (u1 == std::string::npos)
+    {
+        return 0;
+    }
+
+    const std::string unit_str = base.substr(u1 + 1, u2 - u1 - 1);
+    if (unit_str.empty())
+    {
+        return 0;
+    }
+    for (char c : unit_str)
+    {
+        if (!std::isdigit(static_cast<unsigned char>(c)))
+        {
+            return 0;
+        }
+    }
+    return std::stoi(unit_str);
 }
 
 
@@ -526,6 +622,52 @@ void Interpreter::ExtractComponent(uint32_t idx)
 
     component.rotation =
         rotation;
+
+    // ----------------------------------------------------
+    // Mirror / unit (KiCad instance fields)
+    // ----------------------------------------------------
+
+    const uint32_t mirror_node =
+        FindNamedChild(idx, "mirror");
+    if (mirror_node != 0)
+    {
+        uint32_t mchild = pool[mirror_node].first_child;
+        if (mchild != 0)
+        {
+            mchild = pool[mchild].next_sibling;
+        }
+        if (mchild != 0)
+        {
+            const std::string axis = GetText(mchild);
+            if (axis == "x")
+            {
+                component.mirror_x = true;
+            }
+            else if (axis == "y")
+            {
+                component.mirror_y = true;
+            }
+        }
+    }
+
+    const uint32_t unit_node =
+        FindNamedChild(idx, "unit");
+    if (unit_node != 0)
+    {
+        uint32_t uchild = pool[unit_node].first_child;
+        if (uchild != 0)
+        {
+            uchild = pool[uchild].next_sibling;
+        }
+        if (uchild != 0)
+        {
+            component.unit = static_cast<int>(GetNumber(uchild));
+            if (component.unit < 1)
+            {
+                component.unit = 1;
+            }
+        }
+    }
 
     // ----------------------------------------------------
     // Debug Header
@@ -620,36 +762,6 @@ void Interpreter::ExtractComponent(uint32_t idx)
     }
 
     // ----------------------------------------------------
-    // Convert KiCad Power Symbols Into Labels
-    // ----------------------------------------------------
-
-    if (component.reference.find("#PWR") == 0)
-    {
-        NetLabel label;
-
-        label.name =
-            component.value;
-
-        label.location =
-            component.location;
-
-        // Power symbols are global nets in KiCad.
-        label.type = LabelType::Global;
-
-        schematic.labels.push_back(
-            label);
-
-        std::cout
-            << "[POWER NET] "
-            << label.name
-            << " @ ("
-            << label.location.x
-            << ", "
-            << label.location.y
-            << ")\n";
-    }
-
-    // ----------------------------------------------------
     // Instance-specific references (reused hierarchical sheets)
     // ----------------------------------------------------
 
@@ -689,6 +801,11 @@ void Interpreter::ExtractComponent(uint32_t idx)
 
         for (const auto& lib_pin : lib.pins)
         {
+            if (lib_pin.unit != 0 && lib_pin.unit != component.unit)
+            {
+                continue;
+            }
+
             Pin pin;
 
             pin.number =
@@ -697,21 +814,68 @@ void Interpreter::ExtractComponent(uint32_t idx)
             pin.name =
                 lib_pin.name;
 
-            Point rotated =
-                RotatePoint(
+            Point transformed =
+                TransformLibOffset(
                     lib_pin.offset,
-                    component.rotation);
+                    component.rotation,
+                    component.mirror_x,
+                    component.mirror_y);
 
             pin.location.x =
                 component.location.x +
-                rotated.x;
+                transformed.x;
 
             pin.location.y =
                 component.location.y +
-                rotated.y;
+                transformed.y;
 
             component.pins.push_back(pin);
         }
+    }
+
+    // ----------------------------------------------------
+    // Convert KiCad Power Symbols Into Labels
+    // (connection point = transformed power pin, not origin)
+    //
+    // Power instances are referenced #PWR…, #U01…, etc. (any '#' except
+    // power-flags). Value is the net name (GND, +12V, …).
+    // #FLG* (PWR_FLAG) must NOT become a net label — Value is "PWR_FLAG"
+    // and would short every flagged net via MergeNamedNets.
+    // ----------------------------------------------------
+
+    const bool is_flag =
+        component.reference.find("#FLG") == 0 ||
+        component.value == "PWR_FLAG";
+    const bool is_power_sym =
+        !component.reference.empty() &&
+        component.reference[0] == '#' &&
+        !is_flag;
+
+    if (is_power_sym && !component.value.empty())
+    {
+        NetLabel label;
+
+        label.name =
+            UnescapeKicadText(component.value);
+
+        label.location =
+            component.pins.empty()
+                ? component.location
+                : component.pins.front().location;
+
+        label.type = LabelType::Global;
+
+        schematic.labels.push_back(
+            label);
+
+        std::cout
+            << "[POWER NET] "
+            << label.name
+            << " @ ("
+            << label.location.x
+            << ", "
+            << label.location.y
+            << ")\n";
     }
 
     schematic.components.push_back(
@@ -872,7 +1036,7 @@ void Interpreter::ExtractSheetPin(
         return;
     }
 
-    pin.name = GetText(child);
+    pin.name = UnescapeKicadText(GetText(child));
     child = pool[child].next_sibling;
     if (child != 0 &&
         (pool[child].type == NodeType::Symbol ||
@@ -1097,6 +1261,8 @@ bool Interpreter::ExtractLabelData(uint32_t idx, NetLabel& label)
     }
 
     if (!found_name) return false;
+
+    label.name = UnescapeKicadText(label.name);
 
     uint32_t at = FindNamedChild(idx, "at");
     if (at != 0)

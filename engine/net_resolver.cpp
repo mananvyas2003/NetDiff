@@ -376,6 +376,20 @@ void NetResolver::Resolve()
     }
 
     // ----------------------------------------
+    // Pin endpoints — KiCad connects pins that
+    // share a point even with no wire between them
+    // (e.g. resistor pad flush against LED anode).
+    // ----------------------------------------
+
+    for (const auto& comp : schematic.components)
+    {
+        for (const auto& pin : comp.pins)
+        {
+            GetOrCreateNode(pin.location);
+        }
+    }
+
+    // ----------------------------------------
     // Components
     // ----------------------------------------
 

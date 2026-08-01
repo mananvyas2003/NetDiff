@@ -272,7 +272,7 @@ ConnectivityGraph BuildGraph(const ProjectInput& input) {
                 p.component_ref = src.reference;
                 p.number = pin.number;
                 p.name = pin.name;
-                p.unit = 1;
+                p.unit = src.unit;
                 c.pins.push_back(std::move(p));
             }
             std::sort(c.pins.begin(), c.pins.end(), [](const Pin& a, const Pin& b) {
@@ -309,6 +309,39 @@ ConnectivityGraph BuildGraph(const ProjectInput& input) {
             local_nets[idx].pins.push_back(conn.component_ref + "." + conn.pin_number);
             if (!conn.net_name.empty() && local_nets[idx].name.empty()) {
                 local_nets[idx].name = conn.net_name;
+            }
+        }
+
+        // Pins that never snapped to geometry (often no-connect) still appear in
+        // KiCad netlists as singleton unconnected-(...) nets.
+        // Multi-unit parts: a pin number mapped on ANY unit counts as mapped.
+        {
+            std::unordered_set<std::string> mapped;
+            for (const auto& conn : mapper.GetConnections()) {
+                if (conn.net_id == UINT32_MAX) {
+                    continue;
+                }
+                mapped.insert(conn.component_ref + "." + conn.pin_number);
+            }
+            std::unordered_set<std::string> emitted_unconnected;
+            for (const auto& src : sch.components) {
+                if (!src.reference.empty() && src.reference[0] == '#') {
+                    continue;
+                }
+                for (const auto& pin : src.pins) {
+                    const std::string pid = src.reference + "." + pin.number;
+                    if (mapped.count(pid) != 0) {
+                        continue;
+                    }
+                    if (!emitted_unconnected.insert(pid).second) {
+                        continue;
+                    }
+                    SheetLocalNet ln;
+                    ln.sheet_path = sheets[si].sheet_path;
+                    ln.name = "unconnected-(" + src.reference + "-Pad" + pin.number + ")";
+                    ln.pins.push_back(pid);
+                    local_nets.push_back(std::move(ln));
+                }
             }
         }
 
@@ -352,6 +385,24 @@ ConnectivityGraph BuildGraph(const ProjectInput& input) {
               });
 
     Dsu dsu(local_nets.size());
+
+    // Multi-unit shared pins (e.g. op-amp power pins on every unit): the same
+    // ref.pin may attach via several geometries. If those land on different
+    // local nets within one sheet, union them — they are one electrical pin.
+    {
+        std::unordered_map<std::string, size_t> pin_first;
+        for (size_t i = 0; i < local_nets.size(); ++i) {
+            for (const auto& p : local_nets[i].pins) {
+                const std::string key = local_nets[i].sheet_path + "\n" + p;
+                auto it = pin_first.find(key);
+                if (it == pin_first.end()) {
+                    pin_first[key] = i;
+                } else {
+                    dsu.Union(it->second, i);
+                }
+            }
+        }
+    }
 
     // Power (#PWR → Global) and global_label: merge by name across all sheets.
     {

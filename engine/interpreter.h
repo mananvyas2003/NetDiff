@@ -6,6 +6,26 @@
 #include <unordered_map>
 #include "parser.h"
 
+// KiCad text escapes in schematic strings, e.g. VPP{slash}MCLR → VPP/MCLR
+inline std::string UnescapeKicadText(std::string s)
+{
+    auto replace_all = [](std::string& str, const std::string& from, const std::string& to) {
+        if (from.empty()) {
+            return;
+        }
+        size_t pos = 0;
+        while ((pos = str.find(from, pos)) != std::string::npos) {
+            str.replace(pos, from.size(), to);
+            pos += to.size();
+        }
+    };
+    replace_all(s, "{slash}", "/");
+    replace_all(s, "{backslash}", "\\");
+    replace_all(s, "{quote}", "'");
+    replace_all(s, "{dblquote}", "\"");
+    return s;
+}
+
 struct Point
 {
     double x = 0.0;
@@ -60,6 +80,13 @@ struct Component
     Point location;
 
     double rotation = 0.0;
+
+    // KiCad `(mirror x)` / `(mirror y)` — applied after rotation.
+    bool mirror_x = false;
+    bool mirror_y = false;
+
+    // Placed unit (1-based). Default 1.
+    int unit = 1;
 
     std::vector<Pin> pins;
 
@@ -117,6 +144,9 @@ struct LibraryPin
     Point offset;
 
     double rotation = 0.0;
+
+    // KiCad unit (1-based). 0 = shared across units (rare for pins).
+    int unit = 0;
 };
 
 struct LibrarySymbol
@@ -228,13 +258,25 @@ public:
 
     void ExtractLibraryPin(
         uint32_t idx,
-        LibrarySymbol& symbol);
+        LibrarySymbol& symbol,
+        int unit);
 
     void PrintLibrarySymbolDetails() const;
 
     void ExtractLibraryPinsRecursive(
         uint32_t idx,
-        LibrarySymbol& symbol);
+        LibrarySymbol& symbol,
+        int current_unit);
+
+    // KiCad lib→schematic: rotation, then mirror. Lib offsets already Y-inverted.
+    static Point TransformLibOffset(
+        Point offset,
+        double rotation,
+        bool mirror_x,
+        bool mirror_y);
+
+    // Parse unit index from nested lib sub-symbol name ("R_1_1" → 1).
+    static int UnitFromSubSymbolName(const std::string& name);
 
 
 
