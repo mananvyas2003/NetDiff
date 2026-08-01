@@ -1,21 +1,20 @@
 #include "netdiff/graph.hpp"
+#include "netdiff/project_loader.hpp"
 
 #include "interpreter.h"
-#include "lexer.h"
 #include "net_resolver.h"
-#include "parser.h"
 #include "pin_mapper.h"
 #include "pin_transform.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
-#include <fstream>
-#include <iomanip>
 #include <iostream>
 #include <sstream>
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -63,7 +62,6 @@ bool LooksNamed(const std::string& name) {
     if (name.empty()) {
         return false;
     }
-    // KiCad-style auto names and empty placeholders.
     if (name.rfind("Net-(", 0) == 0) {
         return false;
     }
@@ -80,7 +78,7 @@ bool LooksPower(const std::string& name) {
     if (name == "GND" || name == "GNDA" || name == "AGND" || name == "DGND") {
         return true;
     }
-    if (!name.empty() && (name[0] == '+' || name[0] == '-')) {
+    if (name[0] == '+' || name[0] == '-') {
         return true;
     }
     if (name.rfind("VCC", 0) == 0 || name.rfind("VDD", 0) == 0 ||
@@ -91,7 +89,6 @@ bool LooksPower(const std::string& name) {
 }
 
 std::string StableHashPinSet(const std::vector<std::string>& pins_sorted) {
-    // FNV-1a 64-bit over pin ids joined by '\n' — deterministic, no hash-map order.
     const uint64_t kOffset = 14695981039346656037ull;
     const uint64_t kPrime = 1099511628211ull;
     uint64_t h = kOffset;
@@ -108,19 +105,102 @@ std::string StableHashPinSet(const std::vector<std::string>& pins_sorted) {
     return oss.str();
 }
 
-std::vector<char> ReadFileBytes(const std::string& path) {
-    std::ifstream file(path, std::ios::binary | std::ios::ate);
-    if (!file.is_open()) {
-        throw std::runtime_error("Failed to open schematic: " + path);
+void ApplyInstanceReference(::Component& src, const std::string& uuid_path) {
+    if (uuid_path.empty()) {
+        return;
     }
-    const auto size = static_cast<size_t>(file.tellg());
-    file.seekg(0);
-    std::vector<char> buffer(size + 1);
-    if (size > 0) {
-        file.read(buffer.data(), static_cast<std::streamsize>(size));
+    for (const auto& kv : src.instance_refs) {
+        if (kv.first == uuid_path) {
+            src.reference = kv.second;
+            return;
+        }
     }
-    buffer[size] = '\0';
-    return buffer;
+}
+
+struct SheetLocalNet {
+    std::string sheet_path;
+    std::string name;
+    bool is_global = false;
+    bool is_hierarchical = false;
+    std::unordered_set<std::string> hierarchical_names;
+    std::unordered_set<std::string> global_names;
+    std::vector<std::string> pins;
+};
+
+struct PointKeyI {
+    int x = 0;
+    int y = 0;
+    bool operator==(const PointKeyI& o) const { return x == o.x && y == o.y; }
+};
+
+struct PointKeyIHash {
+    size_t operator()(const PointKeyI& p) const {
+        return std::hash<int>()(p.x) ^ (std::hash<int>()(p.y) << 1);
+    }
+};
+
+PointKeyI MakePointKey(const Point& p) {
+    PointKeyI k;
+    k.x = static_cast<int>(std::round(p.x * 1000.0));
+    k.y = static_cast<int>(std::round(p.y * 1000.0));
+    return k;
+}
+
+class Dsu {
+public:
+    explicit Dsu(size_t n) : parent_(n), rank_(n, 0) {
+        for (size_t i = 0; i < n; ++i) {
+            parent_[i] = i;
+        }
+    }
+
+    size_t Find(size_t x) {
+        if (parent_[x] != x) {
+            parent_[x] = Find(parent_[x]);
+        }
+        return parent_[x];
+    }
+
+    void Union(size_t a, size_t b) {
+        a = Find(a);
+        b = Find(b);
+        if (a == b) {
+            return;
+        }
+        if (rank_[a] < rank_[b]) {
+            parent_[a] = b;
+        } else if (rank_[a] > rank_[b]) {
+            parent_[b] = a;
+        } else {
+            parent_[b] = a;
+            rank_[a]++;
+        }
+    }
+
+private:
+    std::vector<size_t> parent_;
+    std::vector<size_t> rank_;
+};
+
+uint32_t FindNetIdForNode(const NetResolver& resolver, uint32_t node_id) {
+    for (const auto& net : resolver.GetNets()) {
+        for (uint32_t nid : net.node_ids) {
+            if (nid == node_id) {
+                return net.id;
+            }
+        }
+    }
+    return UINT32_MAX;
+}
+
+uint32_t FindNetIdAtPoint(const NetResolver& resolver, const Point& p) {
+    const PointKeyI key = MakePointKey(p);
+    for (const auto& node : resolver.GetNodes()) {
+        if (MakePointKey(node.position) == key) {
+            return FindNetIdForNode(resolver, node.id);
+        }
+    }
+    return UINT32_MAX;
 }
 
 }  // namespace
@@ -132,68 +212,138 @@ ConnectivityGraph BuildGraph(const ProjectInput& input) {
 
     StdoutSilence silence;
 
-    auto buffer = ReadFileBytes(input.entry_file);
-
-    Lexer lexer(buffer.data());
-    Parser parser(lexer);
-    const uint32_t root = parser.Parse();
-    if (root == 0) {
-        throw std::runtime_error("Parser returned empty AST for: " + input.entry_file);
-    }
-
-    Interpreter interpreter(parser.GetPool());
-    Schematic schematic = interpreter.Execute(root);
-
-    for (auto& comp : schematic.components) {
-        PinTransform::ComputeWorldPins(comp);
-    }
-
-    NetResolver resolver(schematic);
-    resolver.Resolve();
-
-    PinMapper mapper(schematic, resolver);
-    mapper.Build();
+    const std::vector<LoadedSheet> sheets = LoadProjectSheets(input.entry_file);
 
     ConnectivityGraph graph;
     graph.schema_version = "1.0";
     graph.source.project_name = StemName(input.entry_file);
     graph.source.entry_file = input.entry_file;
-    graph.source.sheet_files = {Basename(input.entry_file)};
     graph.source.revision = input.revision.empty() ? "working-tree" : input.revision;
 
-    // Components
-    graph.components.reserve(schematic.components.size());
-    for (const auto& src : schematic.components) {
-        // Skip power / annotation symbols from the component inventory.
-        if (!src.reference.empty() && src.reference[0] == '#') {
-            continue;
+    {
+        std::vector<std::string> bases;
+        bases.reserve(sheets.size());
+        for (const auto& s : sheets) {
+            bases.push_back(Basename(s.path));
+        }
+        std::sort(bases.begin(), bases.end());
+        bases.erase(std::unique(bases.begin(), bases.end()), bases.end());
+        graph.source.sheet_files = std::move(bases);
+    }
+
+    std::vector<SheetLocalNet> local_nets;
+    std::vector<std::unordered_map<uint32_t, size_t>> sheet_net_index(sheets.size());
+    std::unordered_map<std::string, size_t> path_to_sheet;
+    for (size_t i = 0; i < sheets.size(); ++i) {
+        path_to_sheet[sheets[i].sheet_path] = i;
+    }
+
+    for (size_t si = 0; si < sheets.size(); ++si) {
+        Schematic sch = sheets[si].schematic;
+
+        for (auto& comp : sch.components) {
+            ApplyInstanceReference(comp, sheets[si].uuid_path);
+            PinTransform::ComputeWorldPins(comp);
         }
 
-        Component c;
-        c.ref = src.reference;
-        c.value = src.value;
-        c.footprint = src.footprint;
-        c.lib_id = src.lib_id;
-        c.sheet_path = "/";
-        c.x = src.location.x;
-        c.y = src.location.y;
-        c.rotation = src.rotation;
+        NetResolver resolver(sch);
+        resolver.Resolve();
 
-        for (const auto& pin : src.pins) {
-            Pin p;
-            p.component_ref = src.reference;
-            p.number = pin.number;
-            p.name = pin.name;
-            p.unit = 1;
-            c.pins.push_back(std::move(p));
-        }
-        std::sort(c.pins.begin(), c.pins.end(), [](const Pin& a, const Pin& b) {
-            if (a.number != b.number) {
-                return a.number < b.number;
+        PinMapper mapper(sch, resolver);
+        mapper.Build();
+
+        for (const auto& src : sch.components) {
+            if (!src.reference.empty() && src.reference[0] == '#') {
+                continue;
             }
-            return a.name < b.name;
-        });
-        graph.components.push_back(std::move(c));
+
+            Component c;
+            c.ref = src.reference;
+            c.value = src.value;
+            c.footprint = src.footprint;
+            c.lib_id = src.lib_id;
+            c.sheet_path = sheets[si].sheet_path;
+            c.x = src.location.x;
+            c.y = src.location.y;
+            c.rotation = src.rotation;
+
+            for (const auto& pin : src.pins) {
+                Pin p;
+                p.component_ref = src.reference;
+                p.number = pin.number;
+                p.name = pin.name;
+                p.unit = 1;
+                c.pins.push_back(std::move(p));
+            }
+            std::sort(c.pins.begin(), c.pins.end(), [](const Pin& a, const Pin& b) {
+                if (a.number != b.number) {
+                    return a.number < b.number;
+                }
+                return a.name < b.name;
+            });
+            graph.components.push_back(std::move(c));
+        }
+
+        std::unordered_map<uint32_t, size_t> net_id_to_local;
+
+        auto EnsureLocalNet = [&](uint32_t net_id, const std::string& net_name) -> size_t {
+            auto it = net_id_to_local.find(net_id);
+            if (it != net_id_to_local.end()) {
+                return it->second;
+            }
+            SheetLocalNet ln;
+            ln.sheet_path = sheets[si].sheet_path;
+            ln.name = net_name;
+            const size_t idx = local_nets.size();
+            local_nets.push_back(std::move(ln));
+            net_id_to_local[net_id] = idx;
+            sheet_net_index[si][net_id] = idx;
+            return idx;
+        };
+
+        for (const auto& conn : mapper.GetConnections()) {
+            if (conn.net_id == UINT32_MAX) {
+                continue;
+            }
+            const size_t idx = EnsureLocalNet(conn.net_id, conn.net_name);
+            local_nets[idx].pins.push_back(conn.component_ref + "." + conn.pin_number);
+            if (!conn.net_name.empty() && local_nets[idx].name.empty()) {
+                local_nets[idx].name = conn.net_name;
+            }
+        }
+
+        for (const auto& label : sch.labels) {
+            const uint32_t net_id = FindNetIdAtPoint(resolver, label.location);
+            if (net_id == UINT32_MAX) {
+                continue;
+            }
+            const size_t idx = EnsureLocalNet(net_id, label.name);
+            if (!label.name.empty() && local_nets[idx].name.empty()) {
+                local_nets[idx].name = label.name;
+            }
+            if (label.type == LabelType::Global) {
+                local_nets[idx].is_global = true;
+                local_nets[idx].global_names.insert(label.name);
+            } else if (label.type == LabelType::Hierarchical) {
+                local_nets[idx].is_hierarchical = true;
+                local_nets[idx].hierarchical_names.insert(label.name);
+            }
+        }
+
+        for (const auto& inst : sch.sheets) {
+            for (const auto& pin : inst.pins) {
+                const uint32_t net_id = FindNetIdAtPoint(resolver, pin.location);
+                if (net_id == UINT32_MAX) {
+                    continue;
+                }
+                const size_t idx = EnsureLocalNet(net_id, pin.name);
+                if (!pin.name.empty() && local_nets[idx].name.empty()) {
+                    local_nets[idx].name = pin.name;
+                }
+                local_nets[idx].hierarchical_names.insert(pin.name);
+                local_nets[idx].is_hierarchical = true;
+            }
+        }
     }
 
     std::sort(graph.components.begin(), graph.components.end(),
@@ -201,34 +351,127 @@ ConnectivityGraph BuildGraph(const ProjectInput& input) {
                   return MakeComponentId(a) < MakeComponentId(b);
               });
 
-    // Nets: group pin connections by net_id from PinMapper / resolver name.
-    std::unordered_map<std::string, std::vector<std::string>> net_to_pins;
-    std::unordered_map<std::string, std::string> net_display_name;
+    Dsu dsu(local_nets.size());
 
-    for (const auto& conn : mapper.GetConnections()) {
-        if (conn.net_id == UINT32_MAX) {
-            continue;
+    // Power (#PWR → Global) and global_label: merge by name across all sheets.
+    {
+        std::unordered_map<std::string, size_t> global_first;
+        for (size_t i = 0; i < local_nets.size(); ++i) {
+            if (!local_nets[i].is_global) {
+                continue;
+            }
+            for (const auto& gname : local_nets[i].global_names) {
+                auto it = global_first.find(gname);
+                if (it == global_first.end()) {
+                    global_first[gname] = i;
+                } else {
+                    dsu.Union(it->second, i);
+                }
+            }
         }
-        std::string key = conn.net_name.empty()
-                              ? ("__anon_" + std::to_string(conn.net_id))
-                              : conn.net_name;
-        std::string pin_id = conn.component_ref + "." + conn.pin_number;
-        net_to_pins[key].push_back(pin_id);
-        net_display_name[key] = conn.net_name.empty() ? key : conn.net_name;
     }
 
-    for (auto& kv : net_to_pins) {
-        auto& pins = kv.second;
-        std::sort(pins.begin(), pins.end());
-        pins.erase(std::unique(pins.begin(), pins.end()), pins.end());
+    // Sheet pin ↔ child hierarchical_label
+    for (size_t si = 0; si < sheets.size(); ++si) {
+        const auto& parent = sheets[si];
+        for (const auto& inst : parent.schematic.sheets) {
+            if (inst.name.empty()) {
+                continue;
+            }
+            const std::string child_path = parent.sheet_path + inst.name + "/";
+            auto cit = path_to_sheet.find(child_path);
+            if (cit == path_to_sheet.end()) {
+                continue;
+            }
+            const size_t child_si = cit->second;
+
+            for (const auto& pin : inst.pins) {
+                size_t parent_net = SIZE_MAX;
+                for (const auto& kv : sheet_net_index[si]) {
+                    const size_t idx = kv.second;
+                    if (local_nets[idx].hierarchical_names.count(pin.name) != 0 ||
+                        local_nets[idx].name == pin.name) {
+                        parent_net = idx;
+                        break;
+                    }
+                }
+
+                size_t child_net = SIZE_MAX;
+                for (const auto& kv : sheet_net_index[child_si]) {
+                    const size_t idx = kv.second;
+                    if (local_nets[idx].hierarchical_names.count(pin.name) != 0) {
+                        child_net = idx;
+                        break;
+                    }
+                }
+
+                if (parent_net != SIZE_MAX && child_net != SIZE_MAX) {
+                    dsu.Union(parent_net, child_net);
+                }
+            }
+        }
+    }
+
+    std::unordered_map<size_t, std::vector<size_t>> groups;
+    for (size_t i = 0; i < local_nets.size(); ++i) {
+        groups[dsu.Find(i)].push_back(i);
+    }
+
+    for (auto& gkv : groups) {
+        auto& members = gkv.second;
+        std::sort(members.begin(), members.end());
 
         Net net;
-        net.name = net_display_name[kv.first];
-        net.pins = pins;
+        std::unordered_set<std::string> pin_set;
+        bool any_global = false;
+        std::string best_name;
+
+        for (size_t mi : members) {
+            const auto& ln = local_nets[mi];
+            if (ln.is_global) {
+                any_global = true;
+            }
+            if (best_name.empty() && !ln.name.empty()) {
+                best_name = ln.name;
+            } else if (!ln.name.empty() && ln.is_global) {
+                best_name = ln.name;
+            } else if (!ln.name.empty() && !LooksNamed(best_name) && LooksNamed(ln.name)) {
+                best_name = ln.name;
+            }
+            for (const auto& p : ln.pins) {
+                pin_set.insert(p);
+            }
+        }
+
+        net.name = best_name;
+        net.pins.assign(pin_set.begin(), pin_set.end());
+        std::sort(net.pins.begin(), net.pins.end());
         net.is_named = LooksNamed(net.name);
         net.is_power = LooksPower(net.name);
-        net.sheet_scope = (net.is_power || net.is_named) ? "global" : "/";
+        if (!net.is_power) {
+            for (size_t mi : members) {
+                for (const auto& g : local_nets[mi].global_names) {
+                    if (LooksPower(g)) {
+                        net.is_power = true;
+                        if (net.name.empty()) {
+                            net.name = g;
+                        }
+                        break;
+                    }
+                }
+                if (net.is_power) {
+                    break;
+                }
+            }
+        }
+        net.is_named = LooksNamed(net.name);
+        net.sheet_scope =
+            (any_global || net.is_power) ? "global" : local_nets[members.front()].sheet_path;
         net.net_id = StableHashPinSet(net.pins);
+
+        if (net.pins.empty()) {
+            continue;
+        }
         if (!net.is_named) {
             graph.stats.unnamed_net_count++;
         }

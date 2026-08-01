@@ -358,6 +358,24 @@ void NetResolver::Resolve()
     }
 
     // ----------------------------------------
+    // Hierarchical sheet pins (parent sheet)
+    // ----------------------------------------
+
+    for (const auto& sheet_inst : schematic.sheets)
+    {
+        for (const auto& pin : sheet_inst.pins)
+        {
+            uint32_t node_id =
+                GetOrCreateNode(pin.location);
+
+            if (!pin.name.empty())
+            {
+                nodes[node_id].labels.push_back(pin.name);
+            }
+        }
+    }
+
+    // ----------------------------------------
     // Components
     // ----------------------------------------
 

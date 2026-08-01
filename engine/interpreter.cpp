@@ -18,6 +18,12 @@ Schematic Interpreter::Execute(uint32_t root)
 {
     Visit(root);
 
+    const uint32_t uuid_node = FindNamedChild(root, "uuid");
+    if (uuid_node != 0)
+    {
+        schematic.uuid = GetSecondChildText(uuid_node);
+    }
+
     PrintLibrarySymbols();
 
     PrintLibrarySymbolDetails();
@@ -627,6 +633,9 @@ void Interpreter::ExtractComponent(uint32_t idx)
         label.location =
             component.location;
 
+        // Power symbols are global nets in KiCad.
+        label.type = LabelType::Global;
+
         schematic.labels.push_back(
             label);
 
@@ -638,6 +647,19 @@ void Interpreter::ExtractComponent(uint32_t idx)
             << ", "
             << label.location.y
             << ")\n";
+    }
+
+    // ----------------------------------------------------
+    // Instance-specific references (reused hierarchical sheets)
+    // ----------------------------------------------------
+
+    const uint32_t instances =
+        FindNamedChild(idx, "instances");
+    if (instances != 0)
+    {
+        ExtractComponentInstances(
+            instances,
+            component);
     }
 
     // ----------------------------------------------------
@@ -757,6 +779,299 @@ void Interpreter::ExtractPins(
         child =
             pool[child].next_sibling;
     }
+}
+
+void Interpreter::ExtractComponentInstances(
+    uint32_t idx,
+    Component& component)
+{
+    // (instances (project "..." (path "/uuid/..." (reference "R1") ...) ...))
+    uint32_t child = pool[idx].first_child;
+    if (child != 0)
+    {
+        child = pool[child].next_sibling;
+    }
+
+    while (child != 0)
+    {
+        if (NodeNameEquals(child, "project"))
+        {
+            uint32_t proj_child = pool[child].first_child;
+            if (proj_child != 0)
+            {
+                proj_child = pool[proj_child].next_sibling;
+            }
+            // skip project name string
+            if (proj_child != 0)
+            {
+                proj_child = pool[proj_child].next_sibling;
+            }
+
+            while (proj_child != 0)
+            {
+                if (NodeNameEquals(proj_child, "path"))
+                {
+                    std::string path;
+                    std::string reference;
+
+                    uint32_t path_child =
+                        pool[proj_child].first_child;
+                    if (path_child != 0)
+                    {
+                        path_child =
+                            pool[path_child].next_sibling;
+                    }
+                    if (path_child != 0)
+                    {
+                        path = GetText(path_child);
+                        path_child =
+                            pool[path_child].next_sibling;
+                    }
+
+                    while (path_child != 0)
+                    {
+                        if (NodeNameEquals(path_child, "reference"))
+                        {
+                            reference =
+                                GetSecondChildText(path_child);
+                        }
+                        path_child =
+                            pool[path_child].next_sibling;
+                    }
+
+                    if (!path.empty() && !reference.empty())
+                    {
+                        component.instance_refs.emplace_back(
+                            path,
+                            reference);
+                    }
+                }
+                proj_child =
+                    pool[proj_child].next_sibling;
+            }
+        }
+        child = pool[child].next_sibling;
+    }
+}
+
+void Interpreter::ExtractSheetPin(
+    uint32_t idx,
+    SheetInstance& sheet)
+{
+    // (pin "NAME" shape (at x y rot) ...)
+    SheetPin pin;
+
+    uint32_t child = pool[idx].first_child;
+    if (child == 0)
+    {
+        return;
+    }
+    child = pool[child].next_sibling;
+    if (child == 0)
+    {
+        return;
+    }
+
+    pin.name = GetText(child);
+    child = pool[child].next_sibling;
+    if (child != 0 &&
+        (pool[child].type == NodeType::Symbol ||
+         pool[child].type == NodeType::String))
+    {
+        pin.shape = GetText(child);
+        child = pool[child].next_sibling;
+    }
+
+    const uint32_t at = FindNamedChild(idx, "at");
+    if (at != 0)
+    {
+        double rot = 0.0;
+        ExtractAt(at, pin.location, rot);
+        (void)rot;
+    }
+
+    sheet.pins.push_back(std::move(pin));
+}
+
+void Interpreter::ExtractSheet(uint32_t idx)
+{
+    SheetInstance sheet;
+
+    const uint32_t at = FindNamedChild(idx, "at");
+    if (at != 0)
+    {
+        double rot = 0.0;
+        ExtractAt(at, sheet.at, rot);
+        (void)rot;
+    }
+
+    const uint32_t size = FindNamedChild(idx, "size");
+    if (size != 0)
+    {
+        uint32_t child = pool[size].first_child;
+        if (child != 0)
+        {
+            child = pool[child].next_sibling;
+        }
+        if (child != 0)
+        {
+            sheet.size.x = GetNumber(child);
+            child = pool[child].next_sibling;
+        }
+        if (child != 0)
+        {
+            sheet.size.y = GetNumber(child);
+        }
+    }
+
+    const uint32_t uuid = FindNamedChild(idx, "uuid");
+    if (uuid != 0)
+    {
+        sheet.uuid = GetSecondChildText(uuid);
+    }
+
+    uint32_t child = pool[idx].first_child;
+    while (child != 0)
+    {
+        if (NodeNameEquals(child, "property"))
+        {
+            uint32_t p = pool[child].first_child;
+            if (p != 0)
+            {
+                p = pool[p].next_sibling;
+            }
+            if (p == 0)
+            {
+                child = pool[child].next_sibling;
+                continue;
+            }
+            const std::string pname = GetText(p);
+            p = pool[p].next_sibling;
+            if (p == 0)
+            {
+                child = pool[child].next_sibling;
+                continue;
+            }
+            const std::string pvalue = GetText(p);
+            if (pname == "Sheetname")
+            {
+                sheet.name = pvalue;
+            }
+            else if (pname == "Sheetfile")
+            {
+                sheet.file = pvalue;
+            }
+        }
+        else if (NodeNameEquals(child, "pin"))
+        {
+            // Sheet hierarchical pins — not symbol pins.
+            ExtractSheetPin(child, sheet);
+        }
+
+        child = pool[child].next_sibling;
+    }
+
+    schematic.sheets.push_back(std::move(sheet));
+}
+
+void Interpreter::ExtractNoConnect(uint32_t idx)
+{
+    const uint32_t at = FindNamedChild(idx, "at");
+    if (at == 0)
+    {
+        return;
+    }
+    NoConnect nc;
+    double rot = 0.0;
+    if (!ExtractAt(at, nc.location, rot))
+    {
+        return;
+    }
+    schematic.no_connects.push_back(nc);
+}
+
+void Interpreter::ExtractBus(uint32_t idx)
+{
+    // Parse bus geometry only — do NOT expand members ({A B} / [0..N]).
+    const uint32_t pts = FindNamedChild(idx, "pts");
+    if (pts == 0)
+    {
+        return;
+    }
+
+    uint32_t child = pool[pts].first_child;
+    if (child != 0)
+    {
+        child = pool[child].next_sibling;
+    }
+
+    Point p1{};
+    Point p2{};
+    bool found_first = false;
+
+    while (child != 0)
+    {
+        if (NodeNameEquals(child, "xy"))
+        {
+            if (!found_first)
+            {
+                ExtractXY(child, p1);
+                found_first = true;
+            }
+            else
+            {
+                ExtractXY(child, p2);
+                BusSegment seg;
+                seg.start = p1;
+                seg.end = p2;
+                schematic.buses.push_back(seg);
+                p1 = p2;
+            }
+        }
+        child = pool[child].next_sibling;
+    }
+}
+
+void Interpreter::ExtractBusEntry(uint32_t idx)
+{
+    // bus_entry: (at x y) (size dx dy) — store as a short segment.
+    const uint32_t at = FindNamedChild(idx, "at");
+    if (at == 0)
+    {
+        return;
+    }
+    Point origin{};
+    double rot = 0.0;
+    if (!ExtractAt(at, origin, rot))
+    {
+        return;
+    }
+
+    Point delta{2.54, 2.54};
+    const uint32_t size = FindNamedChild(idx, "size");
+    if (size != 0)
+    {
+        uint32_t child = pool[size].first_child;
+        if (child != 0)
+        {
+            child = pool[child].next_sibling;
+        }
+        if (child != 0)
+        {
+            delta.x = GetNumber(child);
+            child = pool[child].next_sibling;
+        }
+        if (child != 0)
+        {
+            delta.y = GetNumber(child);
+        }
+    }
+
+    BusSegment seg;
+    seg.start = origin;
+    seg.end.x = origin.x + delta.x;
+    seg.end.y = origin.y + delta.y;
+    schematic.buses.push_back(seg);
 }
 
 // ---------------------------------------------------------
@@ -885,6 +1200,26 @@ void Interpreter::Visit(uint32_t idx)
     else if (NodeNameEquals(idx, "hierarchical_label"))
     {
         ExtractHierarchicalLabel(idx);
+        is_top_level_entity = true;
+    }
+    else if (NodeNameEquals(idx, "sheet"))
+    {
+        ExtractSheet(idx);
+        is_top_level_entity = true;
+    }
+    else if (NodeNameEquals(idx, "no_connect"))
+    {
+        ExtractNoConnect(idx);
+        is_top_level_entity = true;
+    }
+    else if (NodeNameEquals(idx, "bus"))
+    {
+        ExtractBus(idx);
+        is_top_level_entity = true;
+    }
+    else if (NodeNameEquals(idx, "bus_entry"))
+    {
+        ExtractBusEntry(idx);
         is_top_level_entity = true;
     }
 
