@@ -11,4 +11,5 @@
 *.pdb
 *.ilk
 graph_esp32.json
+tests/corpus/_staging/
 .DS_Store
