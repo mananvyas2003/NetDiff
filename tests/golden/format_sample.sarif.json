@@ -1,0 +1,164 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "runs": [
+    {
+      "results": [
+        {
+          "level": "warning",
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "tests/corpus/pic_programmer/pic_programmer.kicad_sch"
+                }
+              },
+              "logicalLocations": [
+                {
+                  "kind": "module",
+                  "name": "R5"
+                }
+              ]
+            }
+          ],
+          "message": {
+            "text": "R5: value 10k -> 4k7"
+          },
+          "ruleId": "component-modified"
+        },
+        {
+          "level": "warning",
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "tests/corpus/pic_programmer/pic_programmer.kicad_sch"
+                }
+              },
+              "logicalLocations": [
+                {
+                  "kind": "module",
+                  "name": "I2C_SCL"
+                }
+              ]
+            }
+          ],
+          "message": {
+            "text": "Net I2C_SCL added"
+          },
+          "ruleId": "net-added"
+        },
+        {
+          "level": "error",
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "tests/corpus/pic_programmer/pic_programmer.kicad_sch"
+                }
+              },
+              "logicalLocations": [
+                {
+                  "kind": "module",
+                  "name": "+5V"
+                }
+              ]
+            }
+          ],
+          "message": {
+            "text": "Nets +3V3 and +5V merged into +5V (via C12.1, U3.14)"
+          },
+          "ruleId": "net-merged"
+        },
+        {
+          "level": "warning",
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "tests/corpus/pic_programmer/pic_programmer.kicad_sch"
+                }
+              },
+              "logicalLocations": [
+                {
+                  "kind": "member",
+                  "name": "U3.7"
+                }
+              ]
+            }
+          ],
+          "message": {
+            "text": "U3.7 moved from GND to +3V3"
+          },
+          "ruleId": "pin-connection-changed"
+        },
+        {
+          "level": "note",
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "tests/corpus/pic_programmer/pic_programmer.kicad_sch"
+                }
+              },
+              "logicalLocations": [
+                {
+                  "kind": "module",
+                  "name": "Net-(R4-Pad3)"
+                }
+              ]
+            }
+          ],
+          "message": {
+            "text": "Net renamed: Net-(R4-Pad2) -> Net-(R4-Pad3)"
+          },
+          "ruleId": "net-renamed"
+        }
+      ],
+      "tool": {
+        "driver": {
+          "informationUri": "https://github.com/netdiff/netdiff",
+          "name": "netdiff",
+          "rules": [
+            {
+              "id": "component-modified",
+              "name": "ComponentModified",
+              "shortDescription": {
+                "text": "ComponentModified detected by semantic schematic diff"
+              }
+            },
+            {
+              "id": "net-added",
+              "name": "NetAdded",
+              "shortDescription": {
+                "text": "NetAdded detected by semantic schematic diff"
+              }
+            },
+            {
+              "id": "net-merged",
+              "name": "NetMerged",
+              "shortDescription": {
+                "text": "NetMerged detected by semantic schematic diff"
+              }
+            },
+            {
+              "id": "net-renamed",
+              "name": "NetRenamed",
+              "shortDescription": {
+                "text": "NetRenamed detected by semantic schematic diff"
+              }
+            },
+            {
+              "id": "pin-connection-changed",
+              "name": "PinConnectionChanged",
+              "shortDescription": {
+                "text": "PinConnectionChanged detected by semantic schematic diff"
+              }
+            }
+          ],
+          "version": "0.1.0"
+        }
+      }
+    }
+  ],
+  "version": "2.1.0"
+}

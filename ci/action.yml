@@ -1,0 +1,151 @@
+name: NetDiff
+description: Semantic connectivity diff for KiCad schematics on pull requests.
+author: NetDiff
+
+branding:
+  icon: git-pull-request
+  color: orange
+
+inputs:
+  path:
+    description: Project path (directory or entry .kicad_sch) within the repository
+    required: false
+    default: "."
+  config:
+    description: Path to .netdiff.yml (optional; CLI walks up from path if omitted)
+    required: false
+    default: ""
+  fail-on:
+    description: Gate override — significant | any | never
+    required: false
+    default: ""
+  comment:
+    description: Post or update a single sticky PR comment with the markdown report
+    required: false
+    default: "true"
+  sarif:
+    description: Write and upload a SARIF report for the code-scanning / Checks UI
+    required: false
+    default: "true"
+  netdiff-binary:
+    description: Path to an existing netdiff binary (skips download / build)
+    required: false
+    default: ""
+  version:
+    description: Release tag to download (e.g. v0.1.0), or "latest"
+    required: false
+    default: "latest"
+  repository:
+    description: GitHub owner/repo that publishes netdiff release assets
+    required: false
+    default: ""
+  token:
+    description: Token for PR comments (and private release downloads)
+    required: false
+    default: ${{ github.token }}
+
+outputs:
+  exit-code:
+    description: netdiff process exit code (0 pass, 1 gate fail, 2+ error)
+    value: ${{ steps.diff.outputs.exit_code }}
+  report-path:
+    description: Path to the markdown report
+    value: ${{ steps.diff.outputs.report_path }}
+  sarif-path:
+    description: Path to the SARIF file (empty if sarif input is false)
+    value: ${{ steps.diff.outputs.sarif_path }}
+
+runs:
+  using: composite
+  steps:
+    - name: Resolve netdiff binary
+      id: bin
+      shell: bash
+      env:
+        INPUT_BINARY: ${{ inputs.netdiff-binary }}
+        INPUT_VERSION: ${{ inputs.version }}
+        INPUT_REPO: ${{ inputs.repository }}
+        ACTION_REPO: ${{ github.action_repository }}
+      run: |
+        set -euo pipefail
+        DEST="${RUNNER_TEMP}/netdiff-bin"
+        mkdir -p "$DEST"
+        if [[ -n "$INPUT_BINARY" ]]; then
+          if [[ ! -x "$INPUT_BINARY" && ! -f "$INPUT_BINARY" ]]; then
+            echo "netdiff-binary not found: $INPUT_BINARY" >&2
+            exit 2
+          fi
+          echo "path=$INPUT_BINARY" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+        REPO="$INPUT_REPO"
+        if [[ -z "$REPO" ]]; then
+          REPO="$ACTION_REPO"
+        fi
+        if [[ -z "$REPO" ]]; then
+          echo "repository input is required when netdiff-binary is empty" >&2
+          exit 2
+        fi
+        chmod +x "${{ github.action_path }}/download_netdiff.sh"
+        BIN="$("${{ github.action_path }}/download_netdiff.sh" "$REPO" "$INPUT_VERSION" "$DEST")"
+        echo "path=$BIN" >> "$GITHUB_OUTPUT"
+        "$BIN" version
+
+    - name: Run netdiff diff --git
+      id: diff
+      shell: bash
+      env:
+        NETDIFF_BIN: ${{ steps.bin.outputs.path }}
+        BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before || github.sha }}
+        HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        PROJECT_PATH: ${{ inputs.path }}
+        CONFIG_PATH: ${{ inputs.config }}
+        FAIL_ON: ${{ inputs.fail-on }}
+        OUT_DIR: ${{ runner.temp }}/netdiff-out
+        WANT_SARIF: ${{ inputs.sarif }}
+      run: |
+        set -euo pipefail
+        python3 "${{ github.action_path }}/run_diff.py" || python "${{ github.action_path }}/run_diff.py"
+        echo "report_path=${OUT_DIR}/report.md" >> "$GITHUB_OUTPUT"
+        if [[ "$WANT_SARIF" == "true" ]]; then
+          echo "sarif_path=${OUT_DIR}/netdiff.sarif" >> "$GITHUB_OUTPUT"
+        else
+          echo "sarif_path=" >> "$GITHUB_OUTPUT"
+        fi
+        echo "exit_code=$(cat "${OUT_DIR}/exit_code")" >> "$GITHUB_OUTPUT"
+        echo "NetDiff exit code: $(cat "${OUT_DIR}/exit_code")"
+        cat "${OUT_DIR}/report.md"
+
+    - name: Upload SARIF
+      if: inputs.sarif == 'true' && steps.diff.outputs.sarif_path != ''
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: ${{ steps.diff.outputs.sarif_path }}
+        category: netdiff
+
+    - name: Post sticky PR comment
+      if: inputs.comment == 'true' && github.event_name == 'pull_request'
+      uses: marocchino/sticky-pull-request-comment@v2
+      with:
+        header: netdiff
+        number: ${{ github.event.pull_request.number }}
+        GITHUB_TOKEN: ${{ inputs.token }}
+        path: ${{ runner.temp }}/netdiff-out/report.md
+
+    - name: Gate
+      shell: bash
+      env:
+        EXIT_CODE: ${{ steps.diff.outputs.exit_code }}
+      run: |
+        set -euo pipefail
+        rc="${EXIT_CODE:-4}"
+        if [[ "$rc" == "0" ]]; then
+          echo "NetDiff gate PASS"
+          exit 0
+        fi
+        if [[ "$rc" == "1" ]]; then
+          echo "NetDiff gate FAIL (connectivity changes)" >&2
+          exit 1
+        fi
+        echo "NetDiff error (exit ${rc})" >&2
+        exit "$rc"

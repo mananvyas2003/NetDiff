@@ -1,0 +1,109 @@
+@import url("https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600&family=Source+Sans+3:wght@400;600&family=IBM+Plex+Mono:wght@400;600&display=swap");
+
+:root {
+  --bg0: #e7eef2;
+  --bg1: #f7fbfc;
+  --ink: #142018;
+  --muted: #4d5f55;
+  --accent: #0f6b4c;
+  --accent-soft: #d7f0e4;
+  --line: #b7c7be;
+  --font-display: "Fraunces", "Iowan Old Style", Georgia, serif;
+  --font-body: "Source Sans 3", "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", Consolas, monospace;
+}
+
+* { box-sizing: border-box; }
+html, body {
+  margin: 0;
+  min-height: 100%;
+  background:
+    linear-gradient(160deg, rgba(15, 107, 76, 0.12), transparent 40%),
+    linear-gradient(345deg, #d5e3ea 0%, var(--bg0) 45%, #f3efe6 100%);
+  color: var(--ink);
+  font-family: var(--font-body);
+}
+
+.page {
+  max-width: 920px;
+  margin: 0 auto;
+  padding: 4rem 1.25rem 5rem;
+}
+
+.brand {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(2.75rem, 7vw, 4.4rem);
+  letter-spacing: -0.03em;
+  color: var(--accent);
+}
+
+.hero h1 {
+  margin: 0.35rem 0 0.75rem;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: clamp(1.35rem, 3vw, 1.9rem);
+  line-height: 1.2;
+}
+
+.lede {
+  margin: 0;
+  max-width: 34rem;
+  color: var(--muted);
+  font-size: 1.05rem;
+}
+
+.drop-zone {
+  margin-top: 2.5rem;
+  padding: 1.5rem;
+  border: 1px dashed var(--line);
+  background: color-mix(in srgb, var(--bg1) 82%, white);
+}
+
+.drop-zone.drag {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.hint { color: var(--muted); font-size: 0.95rem; }
+
+.pickers {
+  display: grid;
+  gap: 0.75rem;
+  margin: 1rem 0;
+}
+
+button {
+  appearance: none;
+  border: 0;
+  background: var(--accent);
+  color: #f4fff8;
+  font: 600 1rem var(--font-body);
+  padding: 0.7rem 1.1rem;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.status { color: var(--muted); font-family: var(--font-mono); font-size: 0.85rem; }
+
+.results {
+  margin-top: 2rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line);
+}
+
+pre {
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  background: #f4f8f6;
+  border: 1px solid var(--line);
+  padding: 1rem;
+}
+
+#summary { color: var(--accent); font-weight: 600; }

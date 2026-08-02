@@ -16,6 +16,134 @@ topology changed.
 
 ---
 
+## Install (no toolchain)
+
+CI publishes platform archives on GitHub Releases (`v*` tags via `.github/workflows/release.yml`):
+
+| Asset | Platform |
+|-------|----------|
+| `netdiff-linux-x86_64.tar.gz` | Linux x86_64 |
+| `netdiff-macos-arm64.tar.gz` | macOS Apple Silicon |
+| `netdiff-macos-x86_64.tar.gz` | macOS Intel |
+| `netdiff-windows-x86_64.zip` | Windows x86_64 |
+
+Each archive contains the `netdiff` binary plus `NOTICE.txt`. Matching `*.sha256` files are attached.
+
+**One-liner (Unix)** — set your GitHub `owner/repo`, then:
+
+```bash
+export NETDIFF_REPO=OWNER/REPO   # e.g. your-org/netdiff
+curl -fsSL "https://raw.githubusercontent.com/${NETDIFF_REPO}/master/scripts/install.sh" | bash
+netdiff version
+```
+
+**Manual download**
+
+```bash
+# Linux x86_64 example
+curl -fsSL -o netdiff.tgz \
+  "https://github.com/OWNER/REPO/releases/latest/download/netdiff-linux-x86_64.tar.gz"
+tar -xzf netdiff.tgz
+sudo mv netdiff /usr/local/bin/
+netdiff version
+```
+
+```powershell
+# Windows (PowerShell) example
+$verUrl = "https://github.com/OWNER/REPO/releases/latest/download/netdiff-windows-x86_64.zip"
+Invoke-WebRequest $verUrl -OutFile netdiff.zip
+Expand-Archive netdiff.zip -DestinationPath .
+.\netdiff.exe version
+```
+
+Local packaging from a build tree (what CI runs):
+
+```bash
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --config Release --target netdiff_cli
+python scripts/package_binary.py --binary build/cli/netdiff --out dist
+```
+
+## GitHub Action
+
+On pull requests, use the composite action in `ci/` (`docs/04_CLI_CI_SPEC.md` §2.1):
+
+```yaml
+- uses: actions/checkout@v4
+  with:
+    fetch-depth: 0
+- uses: OWNER/REPO/ci@v0.1.0
+  with:
+    path: .
+    comment: true
+    sarif: true
+```
+
+See `ci/README.md` for inputs, permissions, and dogfooding with a locally built binary.
+
+## GitLab CI & pre-commit
+
+- **GitLab:** include `ci/gitlab-netdiff.yml` (set `NETDIFF_REPO` to the GitHub project that
+  publishes release binaries). See comments at the top of that file.
+- **pre-commit:** add this repo as a hook source (`ci/.pre-commit-hooks.yaml`, id `netdiff`) or
+  run `python ci/pre_commit_netdiff.py` locally. Blocks commits when `netdiff diff --staged`
+  gate-fails; bypass with `git commit --no-verify`.
+
+## KiCad plugin
+
+See `plugin/README.md`. Install `plugin/plugins/netdiff_kicad/` into KiCad's scripting plugins
+folder, ensure the `netdiff` binary is on `PATH` / `NETDIFF_BIN`, then use
+**NetDiff: review my changes**.
+
+## Browser demo (WASM)
+
+Client-side demo lives in `web/demo/` (`docs/05_BUILD_PLAN.md` T2.5). Build the module with
+Emscripten (`emcmake cmake -S . -B build-wasm && cmake --build build-wasm --target netdiff_wasm`),
+then serve `web/demo`. CI workflow `.github/workflows/wasm.yml` produces the same artifacts for
+Vercel/static hosting. Details: `web/demo/README.md`.
+
+## Using the CLI
+
+Build from source (CMake + any C++17 compiler); the product binary lands at `build/cli/netdiff`:
+
+```
+cmake -S . -B build && cmake --build build -j 8
+ctest --test-dir build --output-on-failure
+```
+
+```
+netdiff diff <before> <after>            # two project dirs or entry .kicad_sch files
+netdiff diff --git <ref_a> <ref_b> [path]  # two git revisions of the project
+netdiff diff --staged [path]             # working tree vs HEAD
+netdiff graph <schematic>                # the ConnectivityGraph as JSON
+netdiff validate [path]                  # does this project parse and resolve?
+netdiff version
+```
+
+Options: `--format text|json|markdown|sarif`, `--output <file>`, `--config <path>`,
+`--fail-on significant|any|never`, `--no-color`, `--quiet`, `--include-cosmetic`.
+
+Exit codes are a CI contract: `0` gate passed, `1` gate failed (connectivity changed),
+`2` usage error, `3` parse/resolve error, `4` internal error. A parse error never exits 0.
+
+Configuration is read from `--config`, else the nearest `.netdiff.yml` walking up to the
+repository root, else built-in defaults; CLI flags override the file. See
+`docs/02_DATA_MODEL.md` §4 for the schema.
+
+### Optional: register as a git difftool
+
+Not required — the CLI works standalone — but you can wire it into `git difftool`:
+
+```
+git config --local diff.netdiff.command \
+  'sh -c "netdiff diff \"$LOCAL\" \"$REMOTE\" --no-color"'
+echo '*.kicad_sch diff=netdiff' >> .gitattributes
+```
+
+For reviewing a whole change rather than one file, prefer `netdiff diff --git <base> <head>`:
+it fetches *every* sheet of a hierarchical project at each revision, which per-file difftools
+cannot do.
+
 ## Why this document set exists
 
 This is the complete build specification for NetDiff, written to be executed by an AI coding agent

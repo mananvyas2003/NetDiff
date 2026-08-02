@@ -147,6 +147,10 @@ void NetResolver::AttachPinsToNodes()
 
         for (const auto& pin : comp.pins)
         {
+            if (pin.hidden && pin.electrical_type == "power_in")
+            {
+                continue;
+            }
             uint32_t best_node =
                 UINT32_MAX;
 
@@ -358,20 +362,15 @@ void NetResolver::Resolve()
     }
 
     // ----------------------------------------
-    // Hierarchical sheet pins (parent sheet)
-    // ----------------------------------------
-
+    // Hierarchical sheet pins (parent sheet): place geometry nodes only.
+    // Do NOT attach pin names as net labels — same-named sheet pins on
+    // disconnected wires must stay separate (KiCad). build_graph joins each
+    // pin to its child by that pin's geometric net.
     for (const auto& sheet_inst : schematic.sheets)
     {
         for (const auto& pin : sheet_inst.pins)
         {
-            uint32_t node_id =
-                GetOrCreateNode(pin.location);
-
-            if (!pin.name.empty())
-            {
-                nodes[node_id].labels.push_back(pin.name);
-            }
+            GetOrCreateNode(pin.location);
         }
     }
 
@@ -379,12 +378,18 @@ void NetResolver::Resolve()
     // Pin endpoints — KiCad connects pins that
     // share a point even with no wire between them
     // (e.g. resistor pad flush against LED anode).
+    // Hidden power_in pins are name-only globals:
+    // do not place them on the canvas graph.
     // ----------------------------------------
 
     for (const auto& comp : schematic.components)
     {
         for (const auto& pin : comp.pins)
         {
+            if (pin.hidden && pin.electrical_type == "power_in")
+            {
+                continue;
+            }
             GetOrCreateNode(pin.location);
         }
     }
@@ -421,6 +426,45 @@ void NetResolver::Resolve()
         Union(
             edge.start_node,
             edge.end_node);
+    }
+
+    // Labels / sheet pins / junctions often sit mid-segment, not only at
+    // endpoints. KiCad treats a point on a wire as electrically connected.
+    {
+        constexpr double kOnSegEps = 0.05;  // mm, matches pin snap scale
+        auto OnSegment = [](const Point& p, const Point& a, const Point& b,
+                            double eps) -> bool {
+            const double abx = b.x - a.x;
+            const double aby = b.y - a.y;
+            const double apx = p.x - a.x;
+            const double apy = p.y - a.y;
+            const double ab2 = abx * abx + aby * aby;
+            if (ab2 < 1e-12) {
+                const double dx = p.x - a.x;
+                const double dy = p.y - a.y;
+                return dx * dx + dy * dy <= eps * eps;
+            }
+            const double t = (apx * abx + apy * aby) / ab2;
+            if (t < -1e-9 || t > 1.0 + 1e-9) {
+                return false;
+            }
+            const double qx = a.x + t * abx;
+            const double qy = a.y + t * aby;
+            const double dx = p.x - qx;
+            const double dy = p.y - qy;
+            return dx * dx + dy * dy <= eps * eps;
+        };
+
+        for (const auto& wire : schematic.wires) {
+            const uint32_t sid = GetOrCreateNode(wire.start);
+            const uint32_t eid = GetOrCreateNode(wire.end);
+            for (const auto& node : nodes) {
+                if (OnSegment(node.position, wire.start, wire.end, kOnSegEps)) {
+                    Union(node.id, sid);
+                    Union(node.id, eid);
+                }
+            }
+        }
     }
 
     // ----------------------------------------

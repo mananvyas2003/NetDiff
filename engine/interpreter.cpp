@@ -3,6 +3,8 @@
 #include <cctype>
 #include <cstring>
 #include <iostream>
+#include <string>
+#include <unordered_set>
 
 // ---------------------------------------------------------
 // Constructor
@@ -164,8 +166,28 @@ void Interpreter::ExtractLibraryPin(
     uint32_t child =
         pool[idx].first_child;
 
-    child =
-        pool[child].next_sibling;
+    // List head atom is "pin"; skip it.
+    if (child != 0)
+    {
+        child = pool[child].next_sibling;
+    }
+
+    // Next atoms: electrical type (power_in, …) then optional shape (line, …).
+    if (child != 0 && pool[child].first_child == 0 &&
+        pool[child].type == NodeType::Symbol)
+    {
+        pin.electrical_type = GetText(child);
+        child = pool[child].next_sibling;
+    }
+    if (child != 0 && pool[child].first_child == 0 &&
+        pool[child].type == NodeType::Symbol &&
+        !NodeNameEquals(child, "at") && !NodeNameEquals(child, "name") &&
+        !NodeNameEquals(child, "number") && !NodeNameEquals(child, "hide") &&
+        !NodeNameEquals(child, "length"))
+    {
+        // shape token — unused for connectivity
+        child = pool[child].next_sibling;
+    }
 
     while (child != 0)
     {
@@ -179,6 +201,29 @@ void Interpreter::ExtractLibraryPin(
         {
             pin.name =
                 GetSecondChildText(child);
+        }
+
+        else if (NodeNameEquals(child, "hide"))
+        {
+            uint32_t hc = pool[child].first_child;
+            if (hc != 0)
+            {
+                // child 0 is often the atom "hide"; value is next sibling
+                if (pool[hc].first_child == 0 && GetText(hc) == "hide")
+                {
+                    hc = pool[hc].next_sibling;
+                }
+                if (hc != 0)
+                {
+                    const std::string flag = GetText(hc);
+                    pin.hidden = (flag == "yes" || flag == "true");
+                }
+            }
+            const std::string via_second = GetSecondChildText(child);
+            if (via_second == "yes" || via_second == "true")
+            {
+                pin.hidden = true;
+            }
         }
 
         else if (NodeNameEquals(child, "at"))
@@ -595,6 +640,20 @@ void Interpreter::ExtractComponent(uint32_t idx)
             GetSecondChildText(lib_id);
     }
 
+    // `(lib_name ...)` names this instance's entry in the sheet's lib_symbols
+    // cache, used when the cached definition has drifted from the library one.
+    // KiCad looks the symbol up under that name, not the lib_id.
+    const uint32_t lib_name =
+        FindNamedChild(idx, "lib_name");
+
+    std::string cache_symbol_name;
+
+    if (lib_name != 0)
+    {
+        cache_symbol_name =
+            GetSecondChildText(lib_name);
+    }
+
     uint32_t at =
         FindNamedChild(idx, "at");
 
@@ -647,6 +706,21 @@ void Interpreter::ExtractComponent(uint32_t idx)
             {
                 component.mirror_y = true;
             }
+        }
+    }
+
+    const uint32_t on_board_node =
+        FindNamedChild(idx, "on_board");
+    if (on_board_node != 0)
+    {
+        uint32_t bchild = pool[on_board_node].first_child;
+        if (bchild != 0)
+        {
+            bchild = pool[bchild].next_sibling;
+        }
+        if (bchild != 0 && GetText(bchild) == "no")
+        {
+            component.on_board = false;
         }
     }
 
@@ -788,8 +862,28 @@ void Interpreter::ExtractComponent(uint32_t idx)
         << "\n";
 
     auto lib_it =
-        library_symbols.find(
-            lib_symbol_name);
+        library_symbols.end();
+
+    if (!cache_symbol_name.empty())
+    {
+        lib_it = library_symbols.find(cache_symbol_name);
+    }
+
+    if (lib_it == library_symbols.end())
+    {
+        lib_it = library_symbols.find(lib_symbol_name);
+    }
+
+    if (lib_it == library_symbols.end())
+    {
+        // Placed lib_id may be "Nickname:Symbol" while lib_symbols stores
+        // either the short name or the prefixed form.
+        const auto colon = lib_symbol_name.find(':');
+        if (colon != std::string::npos && colon + 1 < lib_symbol_name.size())
+        {
+            lib_it = library_symbols.find(lib_symbol_name.substr(colon + 1));
+        }
+    }
 
     if (lib_it != library_symbols.end())
     {
@@ -799,10 +893,15 @@ void Interpreter::ExtractComponent(uint32_t idx)
         component.pins.reserve(
             lib.pins.size());
 
+        // Keep pins for every unit; build_graph selects the instance unit
+        // (reused hierarchical sheets may place A/B/C/D of one LMV324).
+        // Skip duplicate (unit, number) from alternate body styles (_1_1 vs _1_2).
+        std::unordered_set<std::string> seen_unit_pin;
         for (const auto& lib_pin : lib.pins)
         {
-            if (lib_pin.unit != 0 && lib_pin.unit != component.unit)
-            {
+            const std::string key =
+                std::to_string(lib_pin.unit) + "\n" + lib_pin.number;
+            if (!seen_unit_pin.insert(key).second) {
                 continue;
             }
 
@@ -813,6 +912,15 @@ void Interpreter::ExtractComponent(uint32_t idx)
 
             pin.name =
                 lib_pin.name;
+
+            pin.electrical_type =
+                lib_pin.electrical_type;
+
+            pin.hidden =
+                lib_pin.hidden;
+
+            pin.unit =
+                lib_pin.unit;
 
             Point transformed =
                 TransformLibOffset(
@@ -877,6 +985,11 @@ void Interpreter::ExtractComponent(uint32_t idx)
             << label.location.y
             << ")\n";
     }
+
+    // Hidden power_in pins are implicit globals by pin *name* only (KiCad
+    // "Hidden Power Pins"). They must NOT become geometric labels — a wire
+    // through the symbol body would otherwise short onto GND/VCC.
+    // build_graph assigns those pins to global nets without canvas geometry.
 
     schematic.components.push_back(
         component);
@@ -992,12 +1105,25 @@ void Interpreter::ExtractComponentInstances(
                             pool[path_child].next_sibling;
                     }
 
+                    int unit = 0;
                     while (path_child != 0)
                     {
                         if (NodeNameEquals(path_child, "reference"))
                         {
                             reference =
                                 GetSecondChildText(path_child);
+                        }
+                        else if (NodeNameEquals(path_child, "unit"))
+                        {
+                            uint32_t uchild = pool[path_child].first_child;
+                            if (uchild != 0)
+                            {
+                                uchild = pool[uchild].next_sibling;
+                            }
+                            if (uchild != 0)
+                            {
+                                unit = static_cast<int>(GetNumber(uchild));
+                            }
                         }
                         path_child =
                             pool[path_child].next_sibling;
@@ -1008,6 +1134,12 @@ void Interpreter::ExtractComponentInstances(
                         component.instance_refs.emplace_back(
                             path,
                             reference);
+                    }
+                    if (!path.empty() && unit > 0)
+                    {
+                        component.instance_units.emplace_back(
+                            path,
+                            unit);
                     }
                 }
                 proj_child =
@@ -1152,6 +1284,43 @@ void Interpreter::ExtractNoConnect(uint32_t idx)
         return;
     }
     schematic.no_connects.push_back(nc);
+}
+
+void Interpreter::ExtractBusAlias(uint32_t idx)
+{
+    // (bus_alias "ETH" (members "TRD0_P" "TRD0_N" ...))
+    BusAliasDef alias;
+    alias.name = UnescapeKicadText(GetSecondChildText(idx));
+    if (alias.name.empty())
+    {
+        return;
+    }
+
+    const uint32_t members = FindNamedChild(idx, "members");
+    if (members == 0)
+    {
+        return;
+    }
+
+    uint32_t child = pool[members].first_child;
+    if (child != 0)
+    {
+        child = pool[child].next_sibling;
+    }
+    while (child != 0)
+    {
+        const std::string member = UnescapeKicadText(GetText(child));
+        if (!member.empty())
+        {
+            alias.members.push_back(member);
+        }
+        child = pool[child].next_sibling;
+    }
+
+    if (!alias.members.empty())
+    {
+        schematic.bus_aliases.push_back(std::move(alias));
+    }
 }
 
 void Interpreter::ExtractBus(uint32_t idx)
@@ -1386,6 +1555,11 @@ void Interpreter::Visit(uint32_t idx)
     else if (NodeNameEquals(idx, "bus_entry"))
     {
         ExtractBusEntry(idx);
+        is_top_level_entity = true;
+    }
+    else if (NodeNameEquals(idx, "bus_alias"))
+    {
+        ExtractBusAlias(idx);
         is_top_level_entity = true;
     }
 

@@ -1,0 +1,33 @@
+# pre-commit hooks provided by this repository (docs/04_CLI_CI_SPEC.md §2.3).
+#
+# In a consumer repo's .pre-commit-config.yaml:
+#
+#   repos:
+#     - repo: https://github.com/OWNER/REPO
+#       rev: v0.1.0
+#       hooks:
+#         - id: netdiff
+#
+# Or for local development of NetDiff itself:
+#
+#   repos:
+#     - repo: local
+#       hooks:
+#         - id: netdiff
+#           name: netdiff
+#           entry: python ci/pre_commit_netdiff.py
+#           language: python
+#           pass_filenames: false
+#           always_run: true
+
+- id: netdiff
+  name: netdiff (connectivity gate on staged changes)
+  description: >
+    Run `netdiff diff --staged` and block the commit when the electrical gate fails.
+    Bypass with git commit --no-verify when intentionally committing connectivity changes.
+  entry: python ci/pre_commit_netdiff.py
+  language: python
+  language_version: python3
+  pass_filenames: false
+  always_run: true
+  stages: [pre-commit]

@@ -35,8 +35,13 @@ struct Component {
     double rotation = 0.0;
 };
 
+// Identity of a part across revisions (02_DATA_MODEL.md §2.2). KiCad annotates
+// refdes uniquely per project — verified against kicad-cli, which declares
+// exactly one `comp` per ref — and a multi-unit part may spread its units over
+// several sheets, so the ref alone is the identity. `sheet_path` is metadata
+// naming where the part's first unit sits, not part of the key.
 inline std::string MakeComponentId(const Component& c) {
-    return c.sheet_path + c.ref;
+    return c.ref;
 }
 
 struct Net {

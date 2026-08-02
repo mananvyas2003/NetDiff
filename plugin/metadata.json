@@ -1,0 +1,28 @@
+{
+  "$schema": "https://go.kicad.org/pcm/schemas/v1",
+  "name": "NetDiff",
+  "description": "Semantic connectivity diff for the open schematic project",
+  "description_full": "Runs the netdiff CLI on the open project (git working tree vs HEAD, or a file-vs-file picker) and lists significant electrical changes. The plugin shells out to the netdiff binary and never reimplements connectivity. Works fully offline.",
+  "identifier": "com.github.netdiff.plugin",
+  "type": "plugin",
+  "author": {
+    "name": "NetDiff",
+    "contact": {}
+  },
+  "license": "TBD",
+  "resources": {
+    "homepage": "https://github.com/OWNER/REPO"
+  },
+  "versions": [
+    {
+      "version": "0.1.0",
+      "status": "development",
+      "kicad_version": "8.0",
+      "download_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "download_size": 0,
+      "download_url": "",
+      "install_size": 0,
+      "platforms": ["linux", "macos", "windows"]
+    }
+  ]
+}

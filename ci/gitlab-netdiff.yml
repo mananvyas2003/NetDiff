@@ -1,0 +1,112 @@
+# NetDiff GitLab CI template (docs/04_CLI_CI_SPEC.md §2.2)
+#
+# Include from a consumer project:
+#
+#   include:
+#     - remote: 'https://raw.githubusercontent.com/OWNER/REPO/v0.1.0/ci/gitlab-netdiff.yml'
+#
+# Or vendor this file and set NETDIFF_VERSION / NETDIFF_REPO CI variables.
+#
+# Required CI/CD variables (project or group):
+#   NETDIFF_REPO     e.g. owner/netdiff  (GitHub releases host for T2.1 assets)
+# Optional:
+#   NETDIFF_VERSION  release tag (default: latest)
+#   NETDIFF_PATH     project path (default: .)
+#   NETDIFF_FAIL_ON  significant|any|never
+#   NETDIFF_CONFIG   path to .netdiff.yml
+
+.spec:
+  rules: &mr_rules
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS
+      when: never
+    - if: $CI_COMMIT_BRANCH
+
+netdiff:
+  stage: test
+  image: python:3.12-slim
+  rules: *mr_rules
+  variables:
+    NETDIFF_VERSION: "latest"
+    NETDIFF_PATH: "."
+  before_script:
+    - apt-get update -qq && apt-get install -y -qq curl ca-certificates git >/dev/null
+    - |
+      if [ -z "${NETDIFF_REPO:-}" ]; then
+        echo "Set CI variable NETDIFF_REPO=owner/name (GitHub repo that publishes netdiff binaries)" >&2
+        exit 2
+      fi
+    - mkdir -p .netdiff-bin
+    - |
+      # Reuse the T2.1/T2.2 download helper when this file is vendored with the repo;
+      # otherwise fetch the script from the same release stream.
+      if [ -f ci/download_netdiff.sh ]; then
+        SCRIPT=ci/download_netdiff.sh
+      else
+        curl -fsSL "https://raw.githubusercontent.com/${NETDIFF_REPO}/master/ci/download_netdiff.sh" -o /tmp/download_netdiff.sh
+        SCRIPT=/tmp/download_netdiff.sh
+      fi
+      chmod +x "$SCRIPT"
+      BIN="$("$SCRIPT" "$NETDIFF_REPO" "$NETDIFF_VERSION" "$PWD/.netdiff-bin")"
+      echo "NETDIFF_BIN=$BIN" >> netdiff.env
+      "$BIN" version
+  script:
+    - set -a && . ./netdiff.env && set +a
+    - |
+      ARGS=(diff --git "$CI_MERGE_REQUEST_DIFF_BASE_SHA" "$CI_COMMIT_SHA" "$NETDIFF_PATH")
+      if [ -n "${NETDIFF_CONFIG:-}" ]; then
+        ARGS+=(--config "$NETDIFF_CONFIG")
+      fi
+      if [ -n "${NETDIFF_FAIL_ON:-}" ]; then
+        ARGS+=(--fail-on "$NETDIFF_FAIL_ON")
+      fi
+      set +e
+      "$NETDIFF_BIN" "${ARGS[@]}" --format markdown --output netdiff-report.md --no-color
+      RC=$?
+      "$NETDIFF_BIN" "${ARGS[@]}" --format sarif --output netdiff.sarif --no-color
+      set -e
+      echo "$RC" > netdiff-exit-code
+      if [ ! -s netdiff-report.md ]; then
+        if [ "$RC" -eq 0 ]; then
+          printf '# NetDiff\n\nNo electrical changes.\n' > netdiff-report.md
+        else
+          printf '# NetDiff\n\nDiff failed (exit %s).\n' "$RC" > netdiff-report.md
+        fi
+      fi
+      cat netdiff-report.md
+      # Surface the report as an MR note when the job token can post notes.
+      if [ -n "${CI_MERGE_REQUEST_IID:-}" ] && [ -n "${CI_API_V4_URL:-}" ]; then
+        python - <<'PY'
+import json, os, urllib.request
+body = open("netdiff-report.md", encoding="utf-8").read()
+payload = json.dumps({"body": "<!-- netdiff-bot -->\n" + body}).encode()
+url = (
+    f"{os.environ['CI_API_V4_URL']}/projects/{os.environ['CI_PROJECT_ID']}"
+    f"/merge_requests/{os.environ['CI_MERGE_REQUEST_IID']}/notes"
+)
+req = urllib.request.Request(
+    url,
+    data=payload,
+    headers={
+        "PRIVATE-TOKEN": os.environ.get("GITLAB_NETDIFF_TOKEN")
+        or os.environ.get("CI_JOB_TOKEN", ""),
+        "Content-Type": "application/json",
+        "JOB-TOKEN": os.environ.get("CI_JOB_TOKEN", ""),
+    },
+    method="POST",
+)
+try:
+    urllib.request.urlopen(req, timeout=30).read()
+    print("Posted MR note")
+except Exception as exc:  # noqa: BLE001 — best-effort note; gate still applies
+    print(f"MR note skipped: {exc}")
+PY
+      fi
+      exit "$(cat netdiff-exit-code)"
+  artifacts:
+    when: always
+    paths:
+      - netdiff-report.md
+      - netdiff.sarif
+      - netdiff-exit-code
+    expire_in: 2 weeks

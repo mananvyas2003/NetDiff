@@ -1,0 +1,35 @@
+# Example / dogfood workflow for the NetDiff composite action (T2.2).
+# Builds the in-tree CLI and runs ci/ against pull_request SHAs.
+
+name: netdiff-action
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+  pull-requests: write
+  security-events: write
+
+jobs:
+  netdiff:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Build netdiff CLI
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --config Release --parallel --target netdiff_cli
+          test -x build/cli/netdiff
+          build/cli/netdiff version
+
+      - name: Run NetDiff action
+        uses: ./ci
+        with:
+          path: .
+          netdiff-binary: build/cli/netdiff
+          comment: true
+          sarif: true

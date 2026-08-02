@@ -65,6 +65,12 @@ struct Pin
     std::string number;
     std::string name;
 
+    std::string electrical_type;
+    bool hidden = false;
+
+    // Library unit (1-based). 0 = common to all units.
+    int unit = 0;
+
     Point location;
     Point world_location;
 
@@ -85,13 +91,19 @@ struct Component
     bool mirror_x = false;
     bool mirror_y = false;
 
-    // Placed unit (1-based). Default 1.
+    // KiCad `(on_board no)` — "Exclude from board". Such symbols are left out
+    // of the netlist export entirely. `(dnp yes)` on its own does not exclude.
+    bool on_board = true;
+
+    // Placed unit (1-based). Default 1. Overridden per sheet path via instance_units.
     int unit = 1;
 
     std::vector<Pin> pins;
 
     // KiCad multi-instance path → reference (for reused hierarchical sheets).
     std::vector<std::pair<std::string, std::string>> instance_refs;
+    // KiCad multi-instance path → unit (quad op-amps across reused sheets).
+    std::vector<std::pair<std::string, int>> instance_units;
 };
 
 struct SheetPin
@@ -122,6 +134,14 @@ struct BusSegment
     Point end;
 };
 
+// KiCad `(bus_alias "NAME" (members "A" "B" ...))`. Declared in a sheet file
+// but visible to the whole hierarchy, like a project-level alias.
+struct BusAliasDef
+{
+    std::string name;
+    std::vector<std::string> members;
+};
+
 struct Schematic
 {
     std::string uuid;
@@ -133,6 +153,7 @@ struct Schematic
     std::vector<SheetInstance> sheets;
     std::vector<NoConnect> no_connects;
     std::vector<BusSegment> buses;
+    std::vector<BusAliasDef> bus_aliases;
 };
 
 
@@ -141,12 +162,18 @@ struct LibraryPin
     std::string number;
     std::string name;
 
+    // KiCad pin electrical type token, e.g. "power_in", "input", "passive".
+    std::string electrical_type;
+
     Point offset;
 
     double rotation = 0.0;
 
-    // KiCad unit (1-based). 0 = shared across units (rare for pins).
+    // KiCad unit (1-based). 0 = shared across all units.
     int unit = 0;
+
+    // `(hide yes)` — invisible pins. Hidden power_in pins are implicit globals.
+    bool hidden = false;
 };
 
 struct LibrarySymbol
@@ -236,6 +263,8 @@ public:
     void ExtractNoConnect(uint32_t idx);
 
     void ExtractBus(uint32_t idx);
+
+    void ExtractBusAlias(uint32_t idx);
 
     void ExtractBusEntry(uint32_t idx);
 

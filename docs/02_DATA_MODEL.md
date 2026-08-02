@@ -40,9 +40,19 @@ Component {
 }
 ```
 Notes:
-- `ref` is the primary identity across revisions. In hierarchical designs a full path may be needed;
-  use `sheet_path + ref` when refs can repeat across sheets. Define `ComponentId = sheet_path + ref`.
-- Multi-unit parts: units share a `ref` but have distinct pins; keep them under one Component.
+- `ref` is the primary identity across revisions. Define `ComponentId = ref`.
+  *(Resolved 2026-08-03, was `sheet_path + ref`.* KiCad annotates refdes uniquely per project —
+  `kicad-cli` declares exactly one `comp` per ref, e.g. vme-wren exports 1507 comps for 1507 distinct
+  refs — while a multi-unit part may spread its units over several sheets, four times in the corpus
+  (`IC14` spans nine sheets). Keying on `sheet_path + ref` would therefore split one physical part
+  into several components, disagree with KiCad's component count, and turn "a unit was moved to
+  another sheet" into a spurious `ComponentRemoved` + `ComponentAdded` pair. If a future input ever
+  does reuse a refdes for a different part, that is a broken annotation and should be reported, not
+  silently accommodated.*)
+- `sheet_path` is metadata identifying where the part's first unit sits; it is not part of the key.
+- Multi-unit parts: units share a `ref` but have distinct pins; keep them under one Component —
+  including when the units are drawn on different sheets. `PinId = ref.number`, so a pin number
+  carried by several units (an op-amp's power pins) is one pin, not several.
 
 ### 2.3 Net
 ```

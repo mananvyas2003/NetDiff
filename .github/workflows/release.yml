@@ -1,0 +1,143 @@
+# T2.1 — packaged binaries for GitHub Releases
+# Spec: docs/05_BUILD_PLAN.md T2.1, docs/01_ARCHITECTURE.md §3 (CLI packaging).
+#
+# Triggers on version tags (v0.1.0) or manual workflow_dispatch.
+# Fresh machines install via scripts/install.sh or the README one-liners.
+
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version label embedded in NOTICE (default: tag or 0.1.0)"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    name: package (${{ matrix.artifact }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            artifact: netdiff-linux-x86_64
+            format: tar.gz
+          - os: macos-14
+            artifact: netdiff-macos-arm64
+            format: tar.gz
+          - os: macos-13
+            artifact: netdiff-macos-x86_64
+            format: tar.gz
+          - os: windows-latest
+            artifact: netdiff-windows-x86_64
+            format: zip
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build netdiff CLI
+        run: cmake --build build --config Release --parallel --target netdiff_cli
+
+      - name: Locate binary (Unix)
+        if: runner.os != 'Windows'
+        id: bin_unix
+        run: |
+          if [[ -x build/cli/netdiff ]]; then
+            echo "path=build/cli/netdiff" >> "$GITHUB_OUTPUT"
+          elif [[ -x build/cli/Release/netdiff ]]; then
+            echo "path=build/cli/Release/netdiff" >> "$GITHUB_OUTPUT"
+          else
+            echo "netdiff binary not found" >&2
+            find build -name netdiff -type f 2>/dev/null || true
+            exit 1
+          fi
+
+      - name: Locate binary (Windows)
+        if: runner.os == 'Windows'
+        id: bin_win
+        shell: pwsh
+        run: |
+          $candidates = @(
+            "build/cli/Release/netdiff.exe",
+            "build/cli/netdiff.exe"
+          )
+          $found = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $found) { throw "netdiff.exe not found" }
+          "path=$found" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      - name: Resolve version label
+        id: ver
+        shell: bash
+        run: |
+          if [[ -n "${{ github.event.inputs.version }}" ]]; then
+            echo "label=${{ github.event.inputs.version }}" >> "$GITHUB_OUTPUT"
+          elif [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            echo "label=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "label=0.1.0" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Package (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          python3 scripts/package_binary.py \
+            --binary "${{ steps.bin_unix.outputs.path }}" \
+            --name "${{ matrix.artifact }}" \
+            --version "${{ steps.ver.outputs.label }}" \
+            --format "${{ matrix.format }}" \
+            --out dist
+
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          python scripts/package_binary.py \
+            --binary "${{ steps.bin_win.outputs.path }}" \
+            --name "${{ matrix.artifact }}" \
+            --version "${{ steps.ver.outputs.label }}" \
+            --format zip \
+            --out dist
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: |
+            dist/${{ matrix.artifact }}.*
+          if-no-files-found: error
+
+  publish:
+    name: publish GitHub Release
+    needs: package
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all packages
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: List assets
+        run: ls -la dist
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true
+          fail_on_unmatched_files: true

@@ -37,6 +37,10 @@ void PinMapper::Build()
         for (const auto& pin :
             comp.pins)
         {
+            // Hidden power_in pins are not skipped: KiCad connects them by
+            // geometry like any other pin, and only the ones that snap to
+            // nothing become implicit globals named after the pin. Parts
+            // commonly stack their extra supply pins on a visible one.
             uint32_t best_node =
                 UINT32_MAX;
 

@@ -1,6 +1,8 @@
 /build/
 /build-*/
 /out/
+/dist/
+/dist-*/
 /cmake-build-*/
 /.vs/
 /CMakeUserPresets.json
@@ -15,3 +17,7 @@ graph_esp32.json
 tests/corpus/_staging/
 .DS_Store
 t06_*.kicad_sch
+__pycache__/
+*.py[cod]
+_tmp_*.py
+*.kicad_prl

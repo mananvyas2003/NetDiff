@@ -35,21 +35,57 @@ jobs:
         shell: bash
         run: ctest --test-dir build -C Release --output-on-failure || ctest --test-dir build --output-on-failure
 
-      - name: Verify binary exists (Unix)
+      - name: Verify binaries exist (Unix)
         if: runner.os != 'Windows'
-        run: test -x build/engine/netdiff_engine
+        run: |
+          test -x build/engine/netdiff_engine
+          test -x build/cli/netdiff
+          build/cli/netdiff version
 
-      - name: Verify binary exists (Windows)
+      - name: Verify binaries exist (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          $candidates = @(
+          $engine = @(
             "build/engine/Release/netdiff_engine.exe",
             "build/engine/netdiff_engine.exe"
-          )
-          $found = $candidates | Where-Object { Test-Path $_ }
-          if (-not $found) { throw "netdiff_engine.exe not found" }
-          Write-Host "Found: $($found[0])"
+          ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $engine) { throw "netdiff_engine.exe not found" }
+          $cli = @(
+            "build/cli/Release/netdiff.exe",
+            "build/cli/netdiff.exe"
+          ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $cli) { throw "netdiff.exe not found" }
+          Write-Host "Found engine: $engine"
+          Write-Host "Found cli: $cli"
+          & $cli version
+
+      - name: Package smoke (T2.1)
+        shell: bash
+        run: |
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            BIN=$(ls build/cli/Release/netdiff.exe build/cli/netdiff.exe 2>/dev/null | head -n 1)
+            NAME=netdiff-windows-x86_64
+            FMT=zip
+            PY=python
+          else
+            BIN=build/cli/netdiff
+            if [[ ! -x "$BIN" ]]; then BIN=build/cli/Release/netdiff; fi
+            OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+            ARCH=$(uname -m | tr '[:upper:]' '[:lower:]')
+            case "$ARCH" in
+              x86_64|amd64) ARCH=x86_64 ;;
+              aarch64|arm64) ARCH=arm64 ;;
+            esac
+            case "$OS" in
+              linux) NAME=netdiff-linux-$ARCH; FMT=tar.gz ;;
+              darwin) NAME=netdiff-macos-$ARCH; FMT=tar.gz ;;
+              *) NAME=netdiff-$OS-$ARCH; FMT=tar.gz ;;
+            esac
+            PY=python3
+          fi
+          $PY scripts/package_binary.py --binary "$BIN" --name "$NAME" --format "$FMT" --out dist-ci
+          ls -la dist-ci
 
   oracle:
     name: netlist-oracle (${{ matrix.os }})

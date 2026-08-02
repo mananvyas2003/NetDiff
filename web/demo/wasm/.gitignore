@@ -1,0 +1,6 @@
+# Keep built demo artifacts so the static site works without a local emsdk.
+*
+!.gitignore
+!README.md
+!netdiff.js
+!netdiff.wasm

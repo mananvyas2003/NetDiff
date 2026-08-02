@@ -38,7 +38,7 @@ MANIFEST_ENTRIES = [
     ("HALPI2", "HALPI2/HALPI2.kicad_sch"),
     ("interf_u", "interf_u/interf_u.kicad_sch"),
     ("stickhub", "stickhub/StickHub.kicad_sch"),
-    ("constraints", "constraints/constraints.kicad_sch"),
+    # constraints demo in KiCad 10.99 is an empty stub; omitted (kicad-cli 10.0 cannot load it).
     ("ecc83", "ecc83/ecc83-pp.kicad_sch"),
 ]
 
@@ -66,7 +66,14 @@ def find_kicad_cli() -> str:
 
 
 def run(cmd: list[str]) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(cmd, capture_output=True, text=True, check=False)
+    return subprocess.run(
+        cmd,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=False,
+    )
 
 
 def export_kicad_netlist(kicad_cli: str, sch: Path, out_path: Path) -> None:

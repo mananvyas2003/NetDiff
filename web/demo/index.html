@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>NetDiff — client-side schematic diff</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main class="page">
+    <header class="hero">
+      <p class="brand">NetDiff</p>
+      <h1>Drop two schematics. Diff stays in your browser.</h1>
+      <p class="lede">
+        Connectivity-only semantic diff powered by WebAssembly. Nothing is uploaded.
+      </p>
+    </header>
+
+    <section class="drop-zone" id="dropzone" tabindex="0">
+      <p><strong>Before</strong> and <strong>after</strong> <code>.kicad_sch</code> files</p>
+      <p class="hint">Drop two files here, or choose them below. Multi-sheet projects: drop the entry sheets only if sheets are self-contained; otherwise use the CLI.</p>
+      <div class="pickers">
+        <label>Before <input type="file" id="before" accept=".kicad_sch,text/plain" /></label>
+        <label>After <input type="file" id="after" accept=".kicad_sch,text/plain" /></label>
+      </div>
+      <button type="button" id="run" disabled>Diff in browser</button>
+      <p class="status" id="status">Loading WASM…</p>
+    </section>
+
+    <section class="results" id="results" hidden>
+      <h2>Result</h2>
+      <pre id="summary"></pre>
+      <pre id="output"></pre>
+    </section>
+  </main>
+  <script src="wasm/netdiff.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

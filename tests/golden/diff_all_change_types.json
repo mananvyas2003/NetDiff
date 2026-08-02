@@ -1,0 +1,227 @@
+{
+  "after_ref": "working-tree",
+  "before_ref": "HEAD~1",
+  "changes": [
+    {
+      "critical": false,
+      "message": "C9 (100n) added",
+      "payload": {
+        "component": {
+          "footprint": "Resistor_SMD:R_0402_1005Metric",
+          "lib_id": "Device:C",
+          "pins": [
+            {
+              "component_ref": "C9",
+              "name": "~",
+              "number": "1",
+              "unit": 1
+            },
+            {
+              "component_ref": "C9",
+              "name": "SDA",
+              "number": "2",
+              "unit": 1
+            }
+          ],
+          "position": {
+            "rotation": 90,
+            "x": 12.699999999999999,
+            "y": 25.399999999999999
+          },
+          "ref": "C9",
+          "sheet_path": "/power/",
+          "value": "100n"
+        }
+      },
+      "significance": "SIGNIFICANT",
+      "type": "ComponentAdded"
+    },
+    {
+      "critical": false,
+      "message": "R17 (10k) removed",
+      "payload": {
+        "component": {
+          "footprint": "Resistor_SMD:R_0402_1005Metric",
+          "lib_id": "Device:R",
+          "pins": [
+            {
+              "component_ref": "R17",
+              "name": "~",
+              "number": "1",
+              "unit": 1
+            },
+            {
+              "component_ref": "R17",
+              "name": "SDA",
+              "number": "2",
+              "unit": 1
+            }
+          ],
+          "position": {
+            "rotation": 90,
+            "x": 12.699999999999999,
+            "y": 25.399999999999999
+          },
+          "ref": "R17",
+          "sheet_path": "/power/",
+          "value": "10k"
+        }
+      },
+      "significance": "SIGNIFICANT",
+      "type": "ComponentRemoved"
+    },
+    {
+      "critical": false,
+      "message": "R5 value 10k -> 4k7, footprint R_0402 -> R_0603",
+      "payload": {
+        "changes": [
+          {
+            "after": "4k7",
+            "before": "10k",
+            "field": "value"
+          },
+          {
+            "after": "R_0603",
+            "before": "R_0402",
+            "field": "footprint"
+          }
+        ],
+        "ref": "R5"
+      },
+      "significance": "SIGNIFICANT",
+      "type": "ComponentModified"
+    },
+    {
+      "critical": false,
+      "message": "Net I2C_SCL added",
+      "payload": {
+        "net": {
+          "is_named": true,
+          "is_power": false,
+          "name": "I2C_SCL",
+          "net_id": "c3",
+          "pins": [
+            "U3.8",
+            "R6.2"
+          ],
+          "sheet_scope": "/power/"
+        }
+      },
+      "significance": "SIGNIFICANT",
+      "type": "NetAdded"
+    },
+    {
+      "critical": false,
+      "message": "Net VBUS removed",
+      "payload": {
+        "net": {
+          "is_named": true,
+          "is_power": true,
+          "name": "VBUS",
+          "net_id": "a1",
+          "pins": [
+            "J1.1",
+            "U7.3"
+          ],
+          "sheet_scope": "global"
+        }
+      },
+      "significance": "SIGNIFICANT",
+      "type": "NetRemoved"
+    },
+    {
+      "critical": true,
+      "message": "Nets +3V3 and +5V merged into +5V (via C12.1)",
+      "payload": {
+        "after_net": "+5V",
+        "before_nets": [
+          "+3V3",
+          "+5V"
+        ],
+        "pins_involved": [
+          "C12.1",
+          "U3.14"
+        ]
+      },
+      "significance": "SIGNIFICANT",
+      "type": "NetMerged"
+    },
+    {
+      "critical": false,
+      "message": "Net I2C_SDA split into I2C_SDA and I2C_SDA_2",
+      "payload": {
+        "after_nets": [
+          "I2C_SDA",
+          "I2C_SDA_2"
+        ],
+        "before_net": "I2C_SDA",
+        "pins_involved": [
+          "U3.7",
+          "R4.1"
+        ]
+      },
+      "significance": "SIGNIFICANT",
+      "type": "NetSplit"
+    },
+    {
+      "critical": false,
+      "message": "R1.2 moved from SCL to unconnected",
+      "payload": {
+        "after_net": "unconnected",
+        "before_net": "SCL",
+        "pin": "R1.2"
+      },
+      "significance": "SIGNIFICANT",
+      "type": "PinConnectionChanged"
+    },
+    {
+      "critical": false,
+      "message": "U3.7 moved from GND to +3V3",
+      "payload": {
+        "after_net": "+3V3",
+        "before_net": "GND",
+        "pin": "U3.7"
+      },
+      "significance": "SIGNIFICANT",
+      "type": "PinConnectionChanged"
+    },
+    {
+      "critical": false,
+      "message": "Net renamed: Net-(R4-Pad2) -> Net-(R4-Pad3)",
+      "payload": {
+        "after_name": "Net-(R4-Pad3)",
+        "before_name": "Net-(R4-Pad2)",
+        "net": {
+          "is_named": false,
+          "is_power": false,
+          "name": "Net-(R4-Pad3)",
+          "net_id": "b2",
+          "pins": [
+            "R4.2",
+            "R5.1"
+          ],
+          "sheet_scope": "/power/"
+        }
+      },
+      "significance": "COSMETIC",
+      "type": "NetRenamed"
+    }
+  ],
+  "schema_version": "1.0",
+  "summary": {
+    "by_type": {
+      "ComponentAdded": 1,
+      "ComponentModified": 1,
+      "ComponentRemoved": 1,
+      "NetAdded": 1,
+      "NetMerged": 1,
+      "NetRemoved": 1,
+      "NetRenamed": 1,
+      "NetSplit": 1,
+      "PinConnectionChanged": 2
+    },
+    "cosmetic_count": 1,
+    "gate": "FAIL",
+    "significant_count": 9
+  }
+}

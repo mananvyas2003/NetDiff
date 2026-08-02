@@ -48,7 +48,6 @@ KiCad demo license: `LICENSE.README` — “Licensed under CC BY-SA 4.0: All the
 | HALPI2 | `HALPI2/HALPI2.kicad_sch` |
 | interf_u | `interf_u/interf_u.kicad_sch` |
 | stickhub | `stickhub/StickHub.kicad_sch` |
-| constraints | `constraints/constraints.kicad_sch` |
 | ecc83 | `ecc83/ecc83-pp.kicad_sch` |
 | simulation | each `*.kicad_sch` under `simulation/` treated as its own entry unless a root sheet is identified |
 
@@ -56,6 +55,7 @@ KiCad demo license: `LICENSE.README` — “Licensed under CC BY-SA 4.0: All the
 
 | Path | Reason |
 |------|--------|
+| `constraints/constraints.kicad_sch` | Empty KiCad 10.99 stub; `kicad-cli` 10.0 fails to load (no symbols) |
 | `tests/fixtures/ESP32_Status_Monitor.kicad_sch` | Smoke fixture only; upstream lacks clear LICENSE |
 | `demos/microwave` | No `.kicad_sch` |
 | `tests/corpus/_staging/` | Local clone cache; gitignored |
