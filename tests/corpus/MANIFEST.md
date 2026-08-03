@@ -30,6 +30,31 @@ Do **not** add projects without recording source URL + license here.
 
 KiCad demo license: `LICENSE.README` — “Licensed under CC BY-SA 4.0: All the demo files provided in demos/*”.
 
+## Sheet counts
+
+Counted as `*.kicad_sch` files under each corpus project directory (entry + child sheets).
+Oracle roots are listed under **Entry files** below. `constraints` is excluded from the oracle.
+
+| Project | Source | Sheets | Multi-sheet |
+|---------|--------|-------:|-------------|
+| `complex_hierarchy` | [KiCad demos](https://github.com/KiCad/kicad-source-mirror/tree/master/demos/complex_hierarchy) | 2 | yes |
+| `kit-dev-coldfire-xilinx_5213` | [KiCad demos](https://github.com/KiCad/kicad-source-mirror/tree/master/demos/kit-dev-coldfire-xilinx_5213) | 3 | yes |
+| `video` | [KiCad demos](https://github.com/KiCad/kicad-source-mirror/tree/master/demos/video) | 8 | yes |
+| `cm5_minima` | [KiCad demos](https://github.com/KiCad/kicad-source-mirror/tree/master/demos/cm5_minima) | 8 | yes |
+| `royalblue54L_feather` | [KiCad demos](https://github.com/KiCad/kicad-source-mirror/tree/master/demos/royalblue54L_feather) | 6 | yes |
+| `pic_programmer` | [KiCad demos](https://github.com/KiCad/kicad-source-mirror/tree/master/demos/pic_programmer) | 2 | yes |
+| `tiny_tapeout` | [KiCad demos](https://github.com/KiCad/kicad-source-mirror/tree/master/demos/tiny_tapeout) | 2 | yes |
+| `multichannel` | [KiCad demos](https://github.com/KiCad/kicad-source-mirror/tree/master/demos/multichannel) | 2 | yes |
+| `openair-max` | [KiCad demos](https://github.com/KiCad/kicad-source-mirror/tree/master/demos/openair-max) | 3 | yes |
+| `jetson-agx-thor-baseboard` | [KiCad demos](https://github.com/KiCad/kicad-source-mirror/tree/master/demos/jetson-agx-thor-baseboard) | 17 | yes |
+| `vme-wren` | [KiCad demos](https://github.com/KiCad/kicad-source-mirror/tree/master/demos/vme-wren) | 37 | yes |
+| `HALPI2` | [hatlabs/HALPI2-hardware](https://github.com/hatlabs/HALPI2-hardware) | 36 | yes |
+| `interf_u` | [KiCad demos](https://github.com/KiCad/kicad-source-mirror/tree/master/demos/interf_u) | 1 | no |
+| `stickhub` | [KiCad demos](https://github.com/KiCad/kicad-source-mirror/tree/master/demos/stickhub) | 1 | no |
+| `ecc83` | [KiCad demos](https://github.com/KiCad/kicad-source-mirror/tree/master/demos/ecc83) | 2 | no |
+
+Oracle set: **15 designs**, **12 multi-sheet** (majority hierarchical).
+
 ## Entry files (oracle roots)
 
 | Corpus id | Entry `.kicad_sch` |

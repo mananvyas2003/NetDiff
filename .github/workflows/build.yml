@@ -111,10 +111,33 @@ jobs:
           cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
           cmake --build build --parallel
 
-      - name: Run netlist oracle
+      - name: Correctness-gate contract (structural)
+        run: python3 tests/oracle/test_correctness_gate_contract.py
+
+      - name: Run netlist oracle + correctness report
         run: |
-          python3 tests/oracle/run_oracle.py --netdiff build/engine/netdiff_engine
+          mkdir -p build
+          python3 tests/oracle/run_oracle.py \
+            --netdiff build/engine/netdiff_engine \
+            --report build/oracle-correctness-report.json
         # Missing kicad-cli must fail red (script exits 2). Never continue-on-error.
+        # Do not loosen comparisons on mismatch — report fails and exit 1.
+
+      - name: Validate correctness report schema
+        if: always()
+        run: |
+          test -f build/oracle-correctness-report.json
+          python3 tests/oracle/test_correctness_gate_contract.py \
+            --report build/oracle-correctness-report.json \
+            --require-report-file
+
+      - name: Upload correctness report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: oracle-correctness-report
+          path: build/oracle-correctness-report.json
+          if-no-files-found: error
 
   sanitize:
     name: asan-ubsan

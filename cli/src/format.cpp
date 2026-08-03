@@ -389,6 +389,8 @@ bool ParseOutputFormat(const std::string& text, OutputFormat* format) {
         *format = OutputFormat::kMarkdown;
     } else if (text == "sarif") {
         *format = OutputFormat::kSarif;
+    } else if (text == "html") {
+        *format = OutputFormat::kHtml;
     } else {
         return false;
     }
@@ -405,6 +407,8 @@ std::string FormatDiff(const DiffResult& result, OutputFormat format,
         return FormatMarkdown(result, options);
     case OutputFormat::kSarif:
         return FormatSarif(result, options);
+    case OutputFormat::kHtml:
+        return FormatHtml(result, options);
     case OutputFormat::kText:
         break;
     }

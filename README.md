@@ -97,10 +97,19 @@ folder, ensure the `netdiff` binary is on `PATH` / `NETDIFF_BIN`, then use
 
 ## Browser demo (WASM)
 
-Client-side demo lives in `web/demo/` (`docs/05_BUILD_PLAN.md` T2.5). Build the module with
-Emscripten (`emcmake cmake -S . -B build-wasm && cmake --build build-wasm --target netdiff_wasm`),
-then serve `web/demo`. CI workflow `.github/workflows/wasm.yml` produces the same artifacts for
-Vercel/static hosting. Details: `web/demo/README.md`.
+- **Dashboard (recommended):** `web/dashboard/` — workspace, filters, inspector, local history, export.
+- **Minimal demo:** `web/demo/` — drop two files, print a short summary.
+
+Build the WASM module with Emscripten (`emcmake cmake -S . -B build-wasm && cmake --build build-wasm --target netdiff_wasm`),
+then:
+
+```bash
+python -m http.server 8080
+# http://localhost:8080/web/dashboard/
+```
+
+CI workflow `.github/workflows/wasm.yml` produces the same artifacts for static/Vercel hosting.
+Details: `web/dashboard/README.md`, `web/demo/README.md`.
 
 ## Using the CLI
 
@@ -120,7 +129,7 @@ netdiff validate [path]                  # does this project parse and resolve?
 netdiff version
 ```
 
-Options: `--format text|json|markdown|sarif`, `--output <file>`, `--config <path>`,
+Options: `--format text|json|markdown|sarif|html`, `--output <file>`, `--config <path>`,
 `--fail-on significant|any|never`, `--no-color`, `--quiet`, `--include-cosmetic`.
 
 Exit codes are a CI contract: `0` gate passed, `1` gate failed (connectivity changed),

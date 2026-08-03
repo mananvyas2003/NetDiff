@@ -6,6 +6,7 @@
 set(NETDIFF_CLI_SOURCES
   src/config.cpp
   src/format.cpp
+  src/format_html.cpp
   src/git.cpp
 )
 
@@ -111,6 +112,19 @@ if(Python3_Interpreter_FOUND)
             --wasm-js ${CMAKE_SOURCE_DIR}/web/demo/wasm/netdiff.js
             --before ${CMAKE_SOURCE_DIR}/tests/corpus/ecc83/ecc83-pp.kicad_sch
             --after ${CMAKE_SOURCE_DIR}/tests/corpus/ecc83/ecc83-pp.kicad_sch
+  )
+
+  add_test(
+    NAME html_visual_review
+    COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/cli/test_html_visual_review.py
+            $<TARGET_FILE:netdiff_cli>
+  )
+
+  add_test(
+    NAME dashboard_assets_smoke
+    COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/web/test_dashboard_assets.py
   )
 else()
   message(WARNING "Python3 not found: SARIF schema validation test disabled")

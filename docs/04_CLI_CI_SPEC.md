@@ -14,7 +14,7 @@ netdiff version
 
 ### 1.2 Options
 ```
---format <text|json|markdown|sarif>   default: text
+--format <text|json|markdown|sarif|html>   default: text
 --output <file>                       default: stdout
 --config <path>                       default: ./.netdiff.yml if present
 --fail-on <significant|any|never>     override config gate
@@ -40,6 +40,9 @@ Never exit 0 on a parse error. Never crash; map every failure to a code and a cl
 - **sarif:** SARIF 2.1.0 so results appear in GitHub/GitLab code-scanning UIs. Each significant
   change is a `result` with a `ruleId` (e.g. `pin-connection-changed`), a `level`
   (`error`/`warning`/`note` from significance), and a location (schematic file + component/net).
+- **html:** self-contained offline visual review page. Changed nets/pins/components are drawn as
+  labeled SVG highlights, grouped by significance and sheet path (hierarchical designs). No
+  external network resources.
 
 ### 1.5 Git integration details
 - `--git a b [path]`: check out (or `git show`) each revision's schematic files into temp dirs,

@@ -43,6 +43,37 @@ MANIFEST_ENTRIES = [
 ]
 
 
+def sheet_count_for(cid: str) -> int:
+    """Number of .kicad_sch files under the corpus project directory."""
+    project_dir = CORPUS / cid
+    if not project_dir.is_dir():
+        return 0
+    return sum(1 for _ in project_dir.rglob("*.kicad_sch"))
+
+
+def pin_count(nets: dict[str, set[str]]) -> int:
+    return sum(len(pins) for pins in nets.values())
+
+
+def write_correctness_report(path: Path, designs: list[dict], meta: dict) -> None:
+    """Machine-readable correctness report (pass/fail per design + counts)."""
+    failed = sum(1 for d in designs if d["status"] == "FAIL")
+    passed = sum(1 for d in designs if d["status"] == "PASS")
+    report = {
+        "schema_version": "1.0",
+        "kind": "netdiff_correctness_report",
+        "passed": failed == 0 and passed > 0,
+        "failed": failed,
+        "passed_count": passed,
+        "design_count": len(designs),
+        "kicad_cli": meta.get("kicad_cli", ""),
+        "netdiff": meta.get("netdiff", ""),
+        "designs": designs,
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
 def find_kicad_cli() -> str:
     env = os.environ.get("KICAD_CLI")
     if env and Path(env).is_file():
@@ -247,10 +278,18 @@ def compare_pinsets(
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser()
+    ap = argparse.ArgumentParser(
+        description="NetDiff ↔ kicad-cli netlist correctness oracle"
+    )
     ap.add_argument("--netdiff", default=os.environ.get("NETDIFF_BIN", ""))
     ap.add_argument("--only", action="append", default=[])
     ap.add_argument("--fast", action="store_true", help="subset of multi-sheet + flats")
+    ap.add_argument(
+        "--report",
+        type=Path,
+        default=None,
+        help="Write machine-readable correctness report JSON to this path",
+    )
     args = ap.parse_args()
 
     kicad_cli = find_kicad_cli()
@@ -289,14 +328,32 @@ def main() -> int:
 
     print(f"kicad-cli: {kicad_cli}")
     print(f"netdiff:   {netdiff_bin}")
+    designs: list[dict] = []
     failed = 0
     with tempfile.TemporaryDirectory(prefix="netdiff-oracle-") as td:
         tdir = Path(td)
         for cid, rel in entries:
             sch = CORPUS / rel
+            sheets = sheet_count_for(cid)
             print(f"\n=== {cid} ===")
+            row: dict = {
+                "id": cid,
+                "entry": rel.replace("\\", "/"),
+                "sheet_count": sheets,
+                "status": "FAIL",
+                "components_kicad": 0,
+                "components_netdiff": 0,
+                "nets_kicad": 0,
+                "nets_netdiff": 0,
+                "pins_kicad": 0,
+                "pins_netdiff": 0,
+                "errors": [],
+            }
             if not sch.is_file():
-                print(f"FAIL: missing {sch}")
+                msg = f"missing {sch}"
+                print(f"FAIL: {msg}")
+                row["errors"] = [msg]
+                designs.append(row)
                 failed += 1
                 continue
             try:
@@ -305,6 +362,13 @@ def main() -> int:
                 exp_comps, exp_nets = parse_kicad_xml_components_and_nets(net_path)
                 graph = load_netdiff_graph(netdiff_bin, sch)
                 act_comps, act_nets = graph_components_and_nets(graph)
+
+                row["components_kicad"] = len(exp_comps)
+                row["components_netdiff"] = len(act_comps)
+                row["nets_kicad"] = len(exp_nets)
+                row["nets_netdiff"] = len(act_nets)
+                row["pins_kicad"] = pin_count(exp_nets)
+                row["pins_netdiff"] = pin_count(act_nets)
 
                 errors: list[str] = []
                 comp_missing = exp_comps - act_comps
@@ -319,15 +383,31 @@ def main() -> int:
                     print("FAIL")
                     for e in errors[:40]:
                         print("  ", e)
+                    row["errors"] = errors
+                    designs.append(row)
                     failed += 1
                 else:
                     print(
                         f"PASS  comps={len(act_comps)} nets={len(act_nets)} "
-                        f"(kicad comps={len(exp_comps)} nets={len(exp_nets)})"
+                        f"(kicad comps={len(exp_comps)} nets={len(exp_nets)}) "
+                        f"sheets={sheets}"
                     )
+                    row["status"] = "PASS"
+                    row["errors"] = []
+                    designs.append(row)
             except Exception as ex:  # noqa: BLE001
                 print(f"FAIL: {ex}")
+                row["errors"] = [str(ex)]
+                designs.append(row)
                 failed += 1
+
+    if args.report is not None:
+        write_correctness_report(
+            args.report,
+            designs,
+            {"kicad_cli": kicad_cli, "netdiff": netdiff_bin},
+        )
+        print(f"\nWrote correctness report: {args.report}")
 
     print("\n========")
     if failed:

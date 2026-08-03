@@ -13,9 +13,9 @@
 namespace netdiff {
 namespace cli {
 
-enum class OutputFormat { kText, kJson, kMarkdown, kSarif };
+enum class OutputFormat { kText, kJson, kMarkdown, kSarif, kHtml };
 
-// Returns false if `text` is not one of text|json|markdown|sarif.
+// Returns false if `text` is not one of text|json|markdown|sarif|html.
 bool ParseOutputFormat(const std::string& text, OutputFormat* format);
 
 struct FormatOptions {
@@ -28,6 +28,9 @@ struct FormatOptions {
 
 std::string FormatDiff(const DiffResult& result, OutputFormat format,
                        const FormatOptions& options);
+
+// Self-contained offline HTML visual review (significant vs cosmetic, per-sheet).
+std::string FormatHtml(const DiffResult& result, const FormatOptions& options);
 
 // "PinConnectionChanged" -> "pin-connection-changed" (SARIF ruleId, 04 §1.4).
 std::string RuleIdFor(ChangeType type);

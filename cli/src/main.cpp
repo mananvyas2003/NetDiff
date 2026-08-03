@@ -1,9 +1,9 @@
-// netdiff CLI โ€” 04_CLI_CI_SPEC.md.
+// netdiff CLI ? 04_CLI_CI_SPEC.md.
 //
-// Exit codes are a contract CI depends on (ยง1.3):
+// Exit codes are a contract CI depends on (ง1.3):
 //   0 gate PASS, 1 gate FAIL, 2 usage error, 3 parse/resolve error, 4 internal.
 // Nothing here knows anything about connectivity; it calls libnetdiff and
-// prints what comes back (01 ยง5, surface contract).
+// prints what comes back (01 ง5, surface contract).
 
 #include <exception>
 #include <filesystem>
@@ -31,7 +31,7 @@ constexpr int kExitInternal = 4;
 constexpr const char* kVersion = "0.1.0";
 
 const char* kUsage =
-    "netdiff โ€” semantic diff for KiCad schematics\n"
+    "netdiff ? semantic diff for KiCad schematics\n"
     "\n"
     "Usage:\n"
     "  netdiff diff <before> <after> [options]\n"
@@ -42,7 +42,7 @@ const char* kUsage =
     "  netdiff version\n"
     "\n"
     "Options:\n"
-    "  --format <text|json|markdown|sarif>   default: text\n"
+    "  --format <text|json|markdown|sarif|html>   default: text\n"
     "  --output <file>                       default: stdout\n"
     "  --config <path>                       default: ./.netdiff.yml if present\n"
     "  --fail-on <significant|any|never>     override the config gate\n"
@@ -137,7 +137,7 @@ bool ParseArgs(const std::vector<std::string>& args, Options* options, std::stri
 
         if (flag == "--format") {
             if (!netdiff::cli::ParseOutputFormat(value, &options->format)) {
-                *error = "unknown --format '" + value + "' (text|json|markdown|sarif)";
+                *error = "unknown --format '" + value + "' (text|json|markdown|sarif|html)";
                 return false;
             }
         } else if (flag == "--output") {
@@ -200,7 +200,7 @@ int RunDiff(Options& options) {
     std::string before_label;
     std::string after_label;
     // Where to start looking for .netdiff.yml. This is the project as the user
-    // named it, never a temporary git checkout โ€” the config lives in the
+    // named it, never a temporary git checkout ? the config lives in the
     // repository, and walking up from a temp directory would never find it.
     std::string config_start_dir;
     TempDir temp;
@@ -253,7 +253,7 @@ int RunDiff(Options& options) {
         before_label = ref_a;
 
         if (options.staged) {
-            // Working tree as it stands (04 ยง1.5).
+            // Working tree as it stands (04 ง1.5).
             after_entry = entry;
             after_label = "working-tree";
         } else {
@@ -286,7 +286,7 @@ int RunDiff(Options& options) {
         config_start_dir = fs::path(after_entry).parent_path().string();
     }
 
-    // Config is resolved next to the design being diffed (04 ยง4).
+    // Config is resolved next to the design being diffed (04 ง4).
     netdiff::cli::ConfigLoadResult loaded =
         netdiff::cli::LoadConfig(options.config_path, config_start_dir);
     if (!loaded.ok) {
@@ -299,7 +299,7 @@ int RunDiff(Options& options) {
         }
     }
     if (!options.fail_on.empty()) {
-        // A flag beats the file (04 ยง4).
+        // A flag beats the file (04 ง4).
         netdiff::cli::ParseFailOn(options.fail_on, &loaded.config.gate.fail_on);
     }
 
@@ -309,13 +309,13 @@ int RunDiff(Options& options) {
         before = BuildOrThrow(before_entry, before_label);
         after = BuildOrThrow(after_entry, after_label);
     } catch (const std::exception& ex) {
-        // The engine names the offending file in its message (04 ง5).
+        // The engine names the offending file in its message (04 ?5).
         Fail(ex.what());
         return kExitParse;
     }
 
     if (before.schema_version != after.schema_version) {
-        // 02 ยง5: refuse to compare incompatible graph schemas.
+        // 02 ง5: refuse to compare incompatible graph schemas.
         Fail("incompatible graph schema versions: " + before.schema_version + " vs " +
              after.schema_version);
         return kExitUsage;
@@ -354,7 +354,7 @@ int RunGraph(const Options& options) {
             return kExitInternal;
         }
     } catch (const std::exception& ex) {
-        // The engine names the offending file in its message (04 ง5).
+        // The engine names the offending file in its message (04 ?5).
         Fail(ex.what());
         return kExitParse;
     }
