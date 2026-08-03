@@ -33,7 +33,14 @@ jobs:
 
       - name: Install test Python deps
         shell: bash
-        run: python3 -m pip install --user jsonschema || python -m pip install --user jsonschema
+        run: |
+          # Install into the same interpreter CMake wired into ctest.
+          PY=$(grep -E '^Python3_EXECUTABLE:' build/CMakeCache.txt | head -n1 | cut -d= -f2- || true)
+          if [[ -z "$PY" || ! -x "$PY" ]]; then
+            PY=$(command -v python3 || command -v python)
+          fi
+          echo "Using Python: $PY"
+          "$PY" -m pip install jsonschema
 
       - name: Unit / determinism tests
         shell: bash

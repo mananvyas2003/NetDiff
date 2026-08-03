@@ -45,7 +45,10 @@ std::string ReadFile(const std::string& path) {
     std::ifstream in(path, std::ios::binary);
     std::ostringstream ss;
     ss << in.rdbuf();
-    return ss.str();
+    std::string text = ss.str();
+    // Git on Windows may check out goldens with CRLF; emitters always use LF.
+    text.erase(std::remove(text.begin(), text.end(), '\r'), text.end());
+    return text;
 }
 
 void CheckGolden(const std::string& path, const std::string& actual) {

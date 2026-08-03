@@ -1,9 +1,18 @@
 #include "json_emit.hpp"
 
+#include <cstdio>
 #include <iomanip>
 
 namespace netdiff {
 namespace json {
+
+// Locale-independent, cross-stdlib float emission so goldens match on
+// libstdc++ / libc++ / MSVC (default ostream<< formatting does not).
+void EmitDouble(std::ostringstream& out, double value) {
+    char buf[64];
+    std::snprintf(buf, sizeof(buf), "%.15g", value);
+    out << buf;
+}
 
 std::string Escape(const std::string& input) {
     std::ostringstream ss;
@@ -61,9 +70,9 @@ void EmitComponent(std::ostringstream& out, const Component& component,
     }
     out << f << "],\n";
     out << f << "\"position\": {\n";
-    out << f2 << "\"rotation\": " << component.rotation << ",\n";
-    out << f2 << "\"x\": " << component.x << ",\n";
-    out << f2 << "\"y\": " << component.y << "\n";
+    out << f2 << "\"rotation\": "; EmitDouble(out, component.rotation); out << ",\n";
+    out << f2 << "\"x\": "; EmitDouble(out, component.x); out << ",\n";
+    out << f2 << "\"y\": "; EmitDouble(out, component.y); out << "\n";
     out << f << "},\n";
     out << f << "\"ref\": "; EmitString(out, component.ref); out << ",\n";
     out << f << "\"sheet_path\": "; EmitString(out, component.sheet_path); out << ",\n";

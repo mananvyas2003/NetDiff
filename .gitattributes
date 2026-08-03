@@ -1,0 +1,2 @@
+# Keep golden fixtures byte-stable across platforms (Windows autocrlf).
+tests/golden/** text eol=lf

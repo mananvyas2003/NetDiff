@@ -174,7 +174,10 @@ std::string ReadFile(const std::string& path) {
     }
     std::ostringstream ss;
     ss << in.rdbuf();
-    return ss.str();
+    std::string text = ss.str();
+    // Git on Windows may check out goldens with CRLF; emitters always use LF.
+    text.erase(std::remove(text.begin(), text.end(), '\r'), text.end());
+    return text;
 }
 
 }  // namespace
