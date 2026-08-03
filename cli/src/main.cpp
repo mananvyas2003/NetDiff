@@ -1,9 +1,9 @@
-// netdiff CLI ? 04_CLI_CI_SPEC.md.
+// netdiff CLI - 04_CLI_CI_SPEC.md.
 //
-// Exit codes are a contract CI depends on (§1.3):
+// Exit codes are a contract CI depends on (sec1.3):
 //   0 gate PASS, 1 gate FAIL, 2 usage error, 3 parse/resolve error, 4 internal.
 // Nothing here knows anything about connectivity; it calls libnetdiff and
-// prints what comes back (01 §5, surface contract).
+// prints what comes back (01 sec5, surface contract).
 
 #include <exception>
 #include <filesystem>
@@ -31,7 +31,7 @@ constexpr int kExitInternal = 4;
 constexpr const char* kVersion = "0.1.0";
 
 const char* kUsage =
-    "netdiff ? semantic diff for KiCad schematics\n"
+    "netdiff - semantic diff for KiCad schematics\n"
     "\n"
     "Usage:\n"
     "  netdiff diff <before> <after> [options]\n"
@@ -200,7 +200,7 @@ int RunDiff(Options& options) {
     std::string before_label;
     std::string after_label;
     // Where to start looking for .netdiff.yml. This is the project as the user
-    // named it, never a temporary git checkout ? the config lives in the
+    // named it, never a temporary git checkout - the config lives in the
     // repository, and walking up from a temp directory would never find it.
     std::string config_start_dir;
     TempDir temp;
@@ -253,7 +253,7 @@ int RunDiff(Options& options) {
         before_label = ref_a;
 
         if (options.staged) {
-            // Working tree as it stands (04 §1.5).
+            // Working tree as it stands (04 sec1.5).
             after_entry = entry;
             after_label = "working-tree";
         } else {
@@ -286,7 +286,7 @@ int RunDiff(Options& options) {
         config_start_dir = fs::path(after_entry).parent_path().string();
     }
 
-    // Config is resolved next to the design being diffed (04 §4).
+    // Config is resolved next to the design being diffed (04 sec4).
     netdiff::cli::ConfigLoadResult loaded =
         netdiff::cli::LoadConfig(options.config_path, config_start_dir);
     if (!loaded.ok) {
@@ -299,7 +299,7 @@ int RunDiff(Options& options) {
         }
     }
     if (!options.fail_on.empty()) {
-        // A flag beats the file (04 §4).
+        // A flag beats the file (04 sec4).
         netdiff::cli::ParseFailOn(options.fail_on, &loaded.config.gate.fail_on);
     }
 
@@ -309,13 +309,13 @@ int RunDiff(Options& options) {
         before = BuildOrThrow(before_entry, before_label);
         after = BuildOrThrow(after_entry, after_label);
     } catch (const std::exception& ex) {
-        // The engine names the offending file in its message (04 ?5).
+        // The engine names the offending file in its message (04 sec5).
         Fail(ex.what());
         return kExitParse;
     }
 
     if (before.schema_version != after.schema_version) {
-        // 02 §5: refuse to compare incompatible graph schemas.
+        // 02 sec5: refuse to compare incompatible graph schemas.
         Fail("incompatible graph schema versions: " + before.schema_version + " vs " +
              after.schema_version);
         return kExitUsage;
@@ -354,7 +354,7 @@ int RunGraph(const Options& options) {
             return kExitInternal;
         }
     } catch (const std::exception& ex) {
-        // The engine names the offending file in its message (04 ?5).
+        // The engine names the offending file in its message (04 sec5).
         Fail(ex.what());
         return kExitParse;
     }

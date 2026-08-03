@@ -69,11 +69,16 @@ fs::path DirectoryForGit(const fs::path& path) {
     return NormalizeFsPath(start);
 }
 
-// Binary-safe: `git show` streams file content that must not be newline
-// translated, so the pipe is opened in binary mode where that is a distinction.
+// On Windows, open the pipe in binary mode so `git show` is not newline-
+// translated. POSIX popen only accepts "r"/"w" (and optionally "e"); "rb"
+// returns NULL on glibc/macOS and makes every git call look like "not a repo".
 CommandResult RunCommand(const std::string& command) {
     CommandResult result;
+#if defined(_WIN32)
     FILE* pipe = NETDIFF_POPEN(command.c_str(), "rb");
+#else
+    FILE* pipe = NETDIFF_POPEN(command.c_str(), "r");
+#endif
     if (pipe == nullptr) {
         return result;
     }

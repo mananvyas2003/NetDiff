@@ -31,6 +31,10 @@ jobs:
         shell: bash
         run: bash tests/portability/check_core_path.sh
 
+      - name: Install test Python deps
+        shell: bash
+        run: python3 -m pip install --user jsonschema || python -m pip install --user jsonschema
+
       - name: Unit / determinism tests
         shell: bash
         run: ctest --test-dir build -C Release --output-on-failure || ctest --test-dir build --output-on-failure
@@ -88,7 +92,7 @@ jobs:
           ls -la dist-ci
 
   oracle:
-    name: netlist-oracle (${{ matrix.os }})
+    name: netlist-oracle
     runs-on: ${{ matrix.os }}
     needs: build
     strategy:
