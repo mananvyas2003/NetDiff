@@ -12,6 +12,7 @@
 #define NETDIFF_POPEN _popen
 #define NETDIFF_PCLOSE _pclose
 #else
+#include <sys/wait.h>
 #define NETDIFF_POPEN popen
 #define NETDIFF_PCLOSE pclose
 #endif
@@ -31,6 +32,43 @@ std::string Quote(const std::string& text) {
     return "\"" + text + "\"";
 }
 
+std::string TrimTrailingNewlines(std::string text) {
+    while (!text.empty() && (text.back() == '\n' || text.back() == '\r')) {
+        text.pop_back();
+    }
+    return text;
+}
+
+// Collapse ".", ".." and redundant separators so `git -C` never sees paths like
+// `/tmp/repo/.` (rejected on Linux CI even when the directory is a valid repo).
+fs::path NormalizeFsPath(fs::path path) {
+    std::error_code ec;
+    fs::path absolute = fs::absolute(path, ec);
+    if (!ec) {
+        path = absolute;
+    }
+    path = path.lexically_normal();
+    while (path.has_filename() && path.filename() == ".") {
+        path = path.parent_path();
+    }
+    if (path.empty()) {
+        path = ".";
+    }
+    return path;
+}
+
+fs::path DirectoryForGit(const fs::path& path) {
+    std::error_code ec;
+    fs::path start = NormalizeFsPath(path);
+    if (fs::is_regular_file(start, ec)) {
+        const fs::path parent = start.parent_path();
+        if (!parent.empty()) {
+            start = parent;
+        }
+    }
+    return NormalizeFsPath(start);
+}
+
 // Binary-safe: `git show` streams file content that must not be newline
 // translated, so the pipe is opened in binary mode where that is a distinction.
 CommandResult RunCommand(const std::string& command) {
@@ -44,7 +82,18 @@ CommandResult RunCommand(const std::string& command) {
     while ((read = std::fread(buffer, 1, sizeof(buffer), pipe)) > 0) {
         result.output.append(buffer, read);
     }
-    result.exit_code = NETDIFF_PCLOSE(pipe);
+    const int status = NETDIFF_PCLOSE(pipe);
+#if defined(_WIN32)
+    result.exit_code = status;
+#else
+    if (status == -1) {
+        result.exit_code = -1;
+    } else if (WIFEXITED(status)) {
+        result.exit_code = WEXITSTATUS(status);
+    } else {
+        result.exit_code = -1;
+    }
+#endif
     return result;
 }
 
@@ -55,13 +104,6 @@ std::string GitCommand(const std::string& repo_root, const std::string& args) {
 #else
            std::string("/dev/null");
 #endif
-}
-
-std::string TrimTrailingNewlines(std::string text) {
-    while (!text.empty() && (text.back() == '\n' || text.back() == '\r')) {
-        text.pop_back();
-    }
-    return text;
 }
 
 bool IsProjectFile(const fs::path& path) {
@@ -95,11 +137,7 @@ bool IsSafeRef(const std::string& ref) {
 }
 
 std::string RepositoryRoot(const std::string& path, GitError* error) {
-    std::error_code ec;
-    fs::path start = fs::absolute(path, ec);
-    if (fs::is_regular_file(start, ec)) {
-        start = start.parent_path();
-    }
+    const fs::path start = DirectoryForGit(path);
     const CommandResult result =
         RunCommand(GitCommand(start.string(), "rev-parse --show-toplevel"));
     if (result.exit_code != 0 || result.output.empty()) {
@@ -107,12 +145,12 @@ std::string RepositoryRoot(const std::string& path, GitError* error) {
         error->message = "not inside a git repository: " + start.string();
         return std::string();
     }
-    return TrimTrailingNewlines(result.output);
+    return NormalizeFsPath(TrimTrailingNewlines(result.output)).string();
 }
 
 std::string ResolveEntryFile(const std::string& path, GitError* error) {
     std::error_code ec;
-    const fs::path input = fs::absolute(path, ec);
+    const fs::path input = NormalizeFsPath(path);
     if (fs::is_regular_file(input, ec)) {
         return input.string();
     }
@@ -129,9 +167,9 @@ std::string ResolveEntryFile(const std::string& path, GitError* error) {
             continue;
         }
         if (entry.path().extension() == ".kicad_sch") {
-            schematics.push_back(entry.path());
+            schematics.push_back(NormalizeFsPath(entry.path()));
         } else if (entry.path().extension() == ".kicad_pro") {
-            projects.push_back(entry.path());
+            projects.push_back(NormalizeFsPath(entry.path()));
         }
     }
     std::sort(schematics.begin(), schematics.end());
@@ -168,8 +206,8 @@ std::string CheckoutProjectAt(const std::string& repo_root, const std::string& r
     }
 
     std::error_code ec;
-    const fs::path root = fs::path(repo_root);
-    const fs::path entry = fs::absolute(entry_path, ec);
+    const fs::path root = NormalizeFsPath(repo_root);
+    const fs::path entry = NormalizeFsPath(entry_path);
     const fs::path project_dir = entry.parent_path();
     const fs::path relative_dir = fs::relative(project_dir, root, ec);
     if (ec) {
@@ -178,12 +216,13 @@ std::string CheckoutProjectAt(const std::string& repo_root, const std::string& r
         return std::string();
     }
     const std::string prefix =
-        (relative_dir == ".") ? std::string() : ToPosix(relative_dir) + "/";
+        (relative_dir.empty() || relative_dir == ".") ? std::string()
+                                                      : ToPosix(relative_dir) + "/";
 
     // Every file of the project as it existed at `ref` — a hierarchical design
     // needs all its sheets, and .kicad_pro carries the bus aliases.
     const CommandResult listing = RunCommand(
-        GitCommand(repo_root, "ls-tree -r --name-only " + Quote(ref)));
+        GitCommand(root.string(), "ls-tree -r --name-only " + Quote(ref)));
     if (listing.exit_code != 0) {
         error->ok = false;
         error->message = "git ls-tree failed for revision '" + ref + "'";
@@ -214,7 +253,7 @@ std::string CheckoutProjectAt(const std::string& repo_root, const std::string& r
 
     for (const auto& path : wanted) {
         const CommandResult blob =
-            RunCommand(GitCommand(repo_root, "show " + Quote(ref + ":" + path)));
+            RunCommand(GitCommand(root.string(), "show " + Quote(ref + ":" + path)));
         if (blob.exit_code != 0) {
             error->ok = false;
             error->message = "git show failed for " + ref + ":" + path;
