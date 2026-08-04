@@ -76,14 +76,27 @@ jobs:
       - name: Package smoke (T2.1)
         shell: bash
         run: |
+          # Prefer multi-config MSVC output layout, then single-config.
+          # Do not use `ls a b` — Git Bash ls exits 2 if either path is missing
+          # (breaks under `set -e` / `pipefail` even when one binary exists).
+          if [[ -f build/cli/Release/netdiff.exe ]]; then
+            BIN=build/cli/Release/netdiff.exe
+          elif [[ -f build/cli/netdiff.exe ]]; then
+            BIN=build/cli/netdiff.exe
+          elif [[ -x build/cli/netdiff ]]; then
+            BIN=build/cli/netdiff
+          elif [[ -x build/cli/Release/netdiff ]]; then
+            BIN=build/cli/Release/netdiff
+          else
+            echo "netdiff binary not found under build/cli/" >&2
+            find build/cli -maxdepth 3 -type f -print >&2 || true
+            exit 1
+          fi
+
           if [[ "${{ runner.os }}" == "Windows" ]]; then
-            BIN=$(ls build/cli/Release/netdiff.exe build/cli/netdiff.exe 2>/dev/null | head -n 1)
             NAME=netdiff-windows-x86_64
             FMT=zip
-            PY=python
           else
-            BIN=build/cli/netdiff
-            if [[ ! -x "$BIN" ]]; then BIN=build/cli/Release/netdiff; fi
             OS=$(uname -s | tr '[:upper:]' '[:lower:]')
             ARCH=$(uname -m | tr '[:upper:]' '[:lower:]')
             case "$ARCH" in
@@ -95,9 +108,10 @@ jobs:
               darwin) NAME=netdiff-macos-$ARCH; FMT=tar.gz ;;
               *) NAME=netdiff-$OS-$ARCH; FMT=tar.gz ;;
             esac
-            PY=python3
           fi
-          $PY scripts/package_binary.py --binary "$BIN" --name "$NAME" --format "$FMT" --out dist-ci
+
+          echo "Packaging binary: $BIN"
+          python scripts/package_binary.py --binary "$BIN" --name "$NAME" --format "$FMT" --out dist-ci
           ls -la dist-ci
 
   oracle:
