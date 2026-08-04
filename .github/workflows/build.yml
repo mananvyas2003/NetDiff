@@ -127,9 +127,13 @@ jobs:
 
       - name: Install KiCad (kicad-cli hard requirement)
         run: |
-          sudo add-apt-repository -y ppa:kicad/kicad-9.0-releases || sudo add-apt-repository -y ppa:kicad/kicad-8.0-releases
+          # Corpus includes KiCad 9.99/10.0 schematics that kicad-cli 9.x cannot load
+          # (cm5_minima, pic_programmer, HALPI2, stickhub → "Failed to load schematic").
+          sudo add-apt-repository -y ppa:kicad/kicad-10.0-releases \
+            || sudo add-apt-repository -y ppa:kicad/kicad-9.0-releases \
+            || sudo add-apt-repository -y ppa:kicad/kicad-8.0-releases
           sudo apt-get update
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y kicad
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --install-recommends kicad
           command -v kicad-cli
           kicad-cli version
 
