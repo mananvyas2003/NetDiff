@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=IBM+Plex+Mono:wght@400;600&family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="/dashboard/styles.css" />
 </head>
 <body>
   <div class="app">
@@ -24,7 +24,7 @@
       <div class="rail-foot">
         <p id="engine-pill" class="engine-pill" data-state="loading">Engine…</p>
         <p class="privacy">Diffs run in your browser.<br />Nothing is uploaded.</p>
-        <a class="rail-link" href="../demo/">Minimal demo</a>
+        <a class="rail-link" href="/demo/">Minimal demo</a>
       </div>
     </aside>
 
@@ -121,13 +121,13 @@
             <li>Pin connection moves between nets</li>
             <li>Cosmetic geometry-only edits suppressed from the gate by default</li>
           </ul>
-          <p class="muted">For git revisions, CI, and multi-sheet checkouts prefer the <code>netdiff</code> CLI. Hierarchical projects need companion sheet files on disk — this dashboard is best for entry-sheet pairs. Prefer a minimal UI? Try the <a href="../demo/">WASM demo</a>.</p>
+          <p class="muted">For git revisions, CI, and multi-sheet checkouts prefer the <code>netdiff</code> CLI. Hierarchical projects need companion sheet files on disk — this dashboard is best for entry-sheet pairs. Prefer a minimal UI? Try the <a href="/demo/">WASM demo</a>.</p>
         </div>
       </section>
     </main>
   </div>
 
-  <script src="../demo/wasm/netdiff.js"></script>
-  <script type="module" src="js/app.js"></script>
+  <script src="/demo/wasm/netdiff.js"></script>
+  <script type="module" src="/dashboard/js/app.js"></script>
 </body>
 </html>

@@ -18,7 +18,7 @@ async function loadModule() {
   const Module = await createNetdiffModule({
     locateFile(path) {
       if (path.endsWith(".wasm")) {
-        return new URL("../../demo/wasm/netdiff.wasm", import.meta.url).href;
+        return "/demo/wasm/netdiff.wasm";
       }
       return path;
     },
