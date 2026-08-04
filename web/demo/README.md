@@ -34,5 +34,6 @@ Requires Node.js to instantiate the WASM module.
 
 ## Vercel
 
-Point a Vercel project at `web/demo` (static) or add `web/demo` as a public route on the
-existing site. Ship the `wasm/` artifacts with the deployment (CI workflow `wasm.yml`).
+Deploy the whole static site from **`web/`** (dashboard + demo). See `web/vercel.json`.
+
+Legacy: a project pointed only at `web/demo` still works; prefer the shared `web` root so `/` is the dashboard.

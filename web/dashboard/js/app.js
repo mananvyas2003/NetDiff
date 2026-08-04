@@ -258,7 +258,7 @@ async function runDiff() {
 async function loadSample() {
   setStatus("Loading sample DiffResult…");
   try {
-    const url = new URL("../../tests/golden/diff_all_change_types.json", import.meta.url);
+    const url = new URL("../data/sample-diff.json", import.meta.url);
     const response = await fetch(url);
     if (!response.ok) {
       throw new Error(

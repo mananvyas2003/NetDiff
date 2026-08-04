@@ -121,6 +121,15 @@ code {
   font-size: 0.82rem;
   line-height: 1.4;
 }
+.rail-link {
+  display: inline-block;
+  margin-top: 0.85rem;
+  color: #c8f04a;
+  font-size: 0.82rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+.rail-link:hover { text-decoration: underline; }
 
 .main {
   padding: 1.25rem 1.5rem 2rem;

@@ -13,21 +13,30 @@ same `libnetdiff` WASM build as `web/demo/` — schematics are not uploaded.
 
 ## Run locally
 
-From the repo root (so sample JSON under `tests/` can load):
-
-```bash
-python -m http.server 8080
-# open http://localhost:8080/web/dashboard/
-```
-
-Or from `web/`:
+From `web/`:
 
 ```bash
 python -m http.server 8080 --directory web
-# open http://localhost:8080/dashboard/
+# dashboard: http://localhost:8080/dashboard/
+# demo:      http://localhost:8080/demo/
 ```
 
 Requires `web/demo/wasm/netdiff.js` + `netdiff.wasm` (built by `emcmake` / CI `wasm.yml`).
+
+## Vercel
+
+Root Directory for the Vercel project: **`web`**.
+
+- `/` → dashboard
+- `/demo` → minimal WASM drop zone
+- Config: `web/vercel.json`
+
+```bash
+npx vercel --cwd web
+npx vercel --cwd web --prod
+```
+
+Ship the checked-in `demo/wasm/` artifacts with the deployment.
 
 ## Relation to Phase 3
 

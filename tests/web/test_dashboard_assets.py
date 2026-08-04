@@ -15,7 +15,9 @@ REQUIRED = [
     DASH / "js" / "wasm.js",
     DASH / "js" / "render.js",
     DASH / "js" / "history.js",
+    DASH / "data" / "sample-diff.json",
     ROOT / "web" / "index.html",
+    ROOT / "web" / "vercel.json",
 ]
 
 

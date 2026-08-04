@@ -37,6 +37,11 @@ html, body {
   letter-spacing: -0.03em;
   color: var(--accent);
 }
+.brand a {
+  color: inherit;
+  text-decoration: none;
+}
+.lede a { color: var(--accent); font-weight: 600; }
 
 .hero h1 {
   margin: 0.35rem 0 0.75rem;

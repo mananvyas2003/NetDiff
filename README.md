@@ -100,15 +100,16 @@ folder, ensure the `netdiff` binary is on `PATH` / `NETDIFF_BIN`, then use
 - **Dashboard (recommended):** `web/dashboard/` — workspace, filters, inspector, local history, export.
 - **Minimal demo:** `web/demo/` — drop two files, print a short summary.
 
-Build the WASM module with Emscripten (`emcmake cmake -S . -B build-wasm && cmake --build build-wasm --target netdiff_wasm`),
-then:
-
 ```bash
-python -m http.server 8080
-# http://localhost:8080/web/dashboard/
+python -m http.server 8080 --directory web
+# http://localhost:8080/dashboard/
+# http://localhost:8080/demo/
 ```
 
-CI workflow `.github/workflows/wasm.yml` produces the same artifacts for static/Vercel hosting.
+**Vercel:** set the project Root Directory to `web` (see `web/vercel.json`). `/` serves the dashboard; `/demo` is the minimal page.
+
+Build the WASM module with Emscripten (`emcmake cmake -S . -B build-wasm && cmake --build build-wasm --target netdiff_wasm`) when regenerating `web/demo/wasm/`. CI workflow `.github/workflows/wasm.yml` ships the same artifacts.
+
 Details: `web/dashboard/README.md`, `web/demo/README.md`.
 
 ## Using the CLI

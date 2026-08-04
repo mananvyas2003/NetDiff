@@ -1,0 +1,7 @@
+{
+  "name": "netdiff",
+  "private": true,
+  "devDependencies": {
+    "vercel": "^58.5.1"
+  }
+}
